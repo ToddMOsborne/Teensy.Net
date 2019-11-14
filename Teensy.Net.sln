@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.902
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Teensy.Net", "Teensy.Net\Teensy.Net.csproj", "{5C0AFEC9-D591-4262-979E-434476D5D620}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Uploader", "Uploader\Uploader.csproj", "{6B97C450-CE9A-4AEE-A997-D19CADEA5924}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5C0AFEC9-D591-4262-979E-434476D5D620}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C0AFEC9-D591-4262-979E-434476D5D620}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C0AFEC9-D591-4262-979E-434476D5D620}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5C0AFEC9-D591-4262-979E-434476D5D620}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B97C450-CE9A-4AEE-A997-D19CADEA5924}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B97C450-CE9A-4AEE-A997-D19CADEA5924}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B97C450-CE9A-4AEE-A997-D19CADEA5924}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B97C450-CE9A-4AEE-A997-D19CADEA5924}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6134021C-B360-4ECF-AD2E-4419CA4DD85C}
+	EndGlobalSection
+EndGlobal
