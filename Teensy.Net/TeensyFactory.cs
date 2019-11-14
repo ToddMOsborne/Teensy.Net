@@ -371,16 +371,18 @@ public class TeensyFactory : IDisposable
 
     /// <summary>
     /// Find a Teensy with the specified serial number. Returns null if not
-    /// found. If desired, the result can also be filtered by UsbType.
+    /// found. If desired, the result can also be filtered by UsbType. If
+    /// serialNumber is 0, this will return the first Teensy found. type, if
+    /// present, will still be used to filter results.
     /// </summary>
-    public Teensy Find(uint      serialNumber,
+    public Teensy Find(uint      serialNumber = 0,
                        UsbTypes? type = null)
     {
         Teensy result = null;
 
         EnumTeensys( teensy =>
         {
-            if ( teensy.SerialNumber == serialNumber )
+            if ( serialNumber == 0 || teensy.SerialNumber == serialNumber )
             {
                 if ( !type.HasValue || type.Value == teensy.UsbType )
                 {

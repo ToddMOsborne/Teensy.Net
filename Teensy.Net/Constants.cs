@@ -100,7 +100,7 @@ public enum UploadResults
     /// </summary>
     ErrorFindTeensy,
     /// <summary>
-    /// The HEX image to upload was null or invalid.
+    /// The HEX image to upload is invalid.
     /// </summary>
     ErrorInvalidHexImage,
     /// <summary>
