@@ -40,8 +40,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Constants.cs" />
-    <Compile Include="HidDevice.cs" />
-    <Compile Include="HidNative.cs" />
+    <Compile Include="TeensyBootloaderDevice.cs" />
+    <Compile Include="NativeMethods.cs" />
     <Compile Include="HidReport.cs" />
     <Compile Include="TeensyFactory.cs" />
     <Compile Include="HexImage.cs" />

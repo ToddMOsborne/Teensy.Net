@@ -236,68 +236,17 @@ public class TeensyFactory : IDisposable
             }
             else if ( id == Constants.BootloaderId )
             {
-                usbType = UsbTypes.Bootloader;
-
                 serialNumber = Utility.FixSerialNumber(
                     Convert.ToUInt32(parts[2], 16));
 
-                // Find board running HalfKay.
-                var teensy = Utility.FindHidDevice(serialNumber);
-
-                switch ( teensy?.BootloaderId )
+                // Find Teensy running bootloader.
+                using ( var teensy =
+                    TeensyBootloaderDevice.FindDevice(serialNumber) )
                 {
-                    case 0x1B:
+                    if ( teensy != null )
                     {
-                        teensyType = TeensyTypes.Teensy2;
-                        break;
-                    }
-
-                    case 0x1C:
-                    {
-                        teensyType = TeensyTypes.Teensy2PlusPlus;
-                        break;
-                    }
-
-                    case 0x1D:
-                    {
-                        teensyType = TeensyTypes.Teensy30;
-                        break;
-                    }
-
-                    case 0x1E:
-                    {
-                        teensyType = TeensyTypes.Teensy31;
-                        break;
-                    }
-
-                    case 0x20:
-                    {
-                        teensyType = TeensyTypes.TeensyLc;
-                        break;
-                    }
-
-                    case 0x21:
-                    {
-                        teensyType = TeensyTypes.Teensy32;
-                        break;
-                    }
-                    
-                    case 0x1F:
-                    {
-                        teensyType = TeensyTypes.Teensy35;
-                        break;
-                    }
-
-                    case 0x22:
-                    {
-                        teensyType = TeensyTypes.Teensy36;
-                        break;
-                    }
-
-                    case 0x24:
-                    {
-                        teensyType = TeensyTypes.Teensy40;
-                        break;
+                        teensyType = teensy.TeensyType;
+                        usbType =    UsbTypes.Bootloader;
                     }
                 }
             }

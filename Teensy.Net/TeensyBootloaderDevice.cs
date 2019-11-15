@@ -2,20 +2,21 @@
 {
 
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
 /// <summary>
-/// A single HID device.
+/// A single Teensy that is running the bootloader. In this state, it is not
+/// available as a serial device, but communication with the Teensy happens
+/// using HID and the HalfKay protocol.
 /// </summary>
-internal class HidDevice : IDisposable
+internal class TeensyBootloaderDevice : IDisposable
 {
     /// <summary>
     /// Constructor must be give name and path to device.
     /// </summary>
-    public HidDevice(string name,
-                     string path)
+    public TeensyBootloaderDevice(string name,
+                                  string path)
     {
         Name = name;
         Path = path;
@@ -23,34 +24,84 @@ internal class HidDevice : IDisposable
         // Get Vendor and Product IDs.
         if ( Open(false) )
         {
-            var attributes =  default(HidNative.HIDD_ATTRIBUTES);
+            var attributes =  default(NativeMethods.HIDD_ATTRIBUTES);
             attributes.Size = Marshal.SizeOf(attributes);
             
-            if ( HidNative.HidD_GetAttributes(Handle, ref attributes) )
+            if ( NativeMethods.HidD_GetAttributes(Handle, ref attributes) )
             {
                 ProductId = attributes.ProductID;
                 VendorId =  attributes.VendorID;
             }
 
-            var capabilities = default(HidNative.HIDP_CAPS);
+            var capabilities = default(NativeMethods.HIDP_CAPS);
             var pointer =      default(IntPtr);
 
-            if ( HidNative.HidD_GetPreparsedData(Handle, ref pointer) )
+            if ( NativeMethods.HidD_GetPreparsedData(Handle, ref pointer) )
             {
-                HidNative.HidP_GetCaps(pointer, ref capabilities);
-                HidNative.HidD_FreePreparsedData(pointer);
+                NativeMethods.HidP_GetCaps(pointer, ref capabilities);
+                NativeMethods.HidD_FreePreparsedData(pointer);
 
-                BootloaderId = (ushort)capabilities.Usage;
+                switch ( capabilities.Usage )
+                {
+                    case 0x1B:
+                    {
+                        TeensyType = TeensyTypes.Teensy2;
+                        break;
+                    }
+
+                    case 0x1C:
+                    {
+                        TeensyType = TeensyTypes.Teensy2PlusPlus;
+                        break;
+                    }
+
+                    case 0x1D:
+                    {
+                        TeensyType = TeensyTypes.Teensy30;
+                        break;
+                    }
+
+                    case 0x1E:
+                    {
+                        TeensyType = TeensyTypes.Teensy31;
+                        break;
+                    }
+
+                    case 0x20:
+                    {
+                        TeensyType = TeensyTypes.TeensyLc;
+                        break;
+                    }
+
+                    case 0x21:
+                    {
+                        TeensyType = TeensyTypes.Teensy32;
+                        break;
+                    }
+                    
+                    case 0x1F:
+                    {
+                        TeensyType = TeensyTypes.Teensy35;
+                        break;
+                    }
+
+                    case 0x22:
+                    {
+                        TeensyType = TeensyTypes.Teensy36;
+                        break;
+                    }
+
+                    case 0x24:
+                    {
+                        TeensyType = TeensyTypes.Teensy40;
+                        break;
+                    }
+                }
             }
 
             Close();
         }
     }
-
-    /// <summary>
-    /// Get the Teensy bootloader ID.
-    /// </summary>
-    public ushort BootloaderId { get; private set; }
 
     /// <summary>
     /// Close device, as needed.
@@ -59,12 +110,7 @@ internal class HidDevice : IDisposable
     {
         if ( IsOpen )
         {
-            if ( Environment.OSVersion.Version.Major > 5 )
-            {
-                HidNative.CancelIoEx(Handle, IntPtr.Zero);
-            }
-            
-            HidNative.CloseHandle(Handle);
+            NativeMethods.CloseHandle(Handle);
 
             Handle =          IntPtr.Zero;
             IsOpenReadWrite = false;
@@ -85,26 +131,13 @@ internal class HidDevice : IDisposable
     public void Dispose() => Close();
 
     /// <summary>
-    /// Get all Teensy devices. If looking for a specific one, pass the serial
-    /// number.
+    /// Given a serial number, find the Teensy device that is running the
+    /// bootloader.
     /// </summary>
-    public static List<HidDevice> GetTeensies(uint serialNumber = 0)
+    internal static TeensyBootloaderDevice FindDevice(uint serialNumber)
     {
-        var result = new List<HidDevice>();
-
-        foreach ( var device in HidNative.GetAllDevices() )
-        {
-            if ( device.VendorId  == Constants.VendorId &&
-                 device.ProductId == Constants.BootloaderId )
-            {
-                if ( serialNumber == 0 || serialNumber == device.SerialNumber )
-                {
-                    result.Add(device);
-                }
-            }
-        }
-
-        return result;
+        var list = NativeMethods.GetAllDevices(serialNumber);
+        return list.Count > 0 ? list[0] : null;
     }
 
     /// <summary>
@@ -141,7 +174,7 @@ internal class HidDevice : IDisposable
 
         if ( !IsOpen )
         {
-            var security = new HidNative.SECURITY_ATTRIBUTES
+            var security = new NativeMethods.SECURITY_ATTRIBUTES
             {
                 lpSecurityDescriptor = IntPtr.Zero,
                 bInheritHandle =       true
@@ -149,13 +182,13 @@ internal class HidDevice : IDisposable
 
             security.nLength = Marshal.SizeOf(security);
 
-            Handle = HidNative.CreateFile(
+            Handle = NativeMethods.CreateFile(
                 Path,
-                readWrite ? HidNative.GENERIC_READ | HidNative.GENERIC_WRITE
+                readWrite ? NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE
                           : 0,
-                HidNative.FILE_SHARE_READ | HidNative.FILE_SHARE_WRITE,
+                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
                 ref security,
-                HidNative.OPEN_EXISTING,
+                NativeMethods.OPEN_EXISTING,
                 0,
                 0);
 
@@ -186,7 +219,7 @@ internal class HidDevice : IDisposable
             {
                 var data = new byte[254];
                 
-                if ( HidNative.HidD_GetSerialNumberString(Handle,
+                if ( NativeMethods.HidD_GetSerialNumberString(Handle,
                                                           ref data[0],
                                                           data.Length) )
                 {
@@ -199,6 +232,11 @@ internal class HidDevice : IDisposable
         }
     }
     private uint _serialNumber;
+
+    /// <summary>
+    /// Get the type of Teensy device.
+    /// </summary>
+    public TeensyTypes TeensyType { get; } = TeensyTypes.Unknown;
 
     /// <summary>
     /// Write report to device.

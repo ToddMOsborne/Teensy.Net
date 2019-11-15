@@ -392,7 +392,8 @@ public class Teensy
         {
             Factory.SafeMethod( () =>
             {
-                using ( var device = Utility.FindHidDevice(SerialNumber) )
+                using ( var device =
+                    TeensyBootloaderDevice.FindDevice(SerialNumber) )
                 {
                     result = device != null && Reboot(device);
                 }
@@ -403,16 +404,16 @@ public class Teensy
     }
 
     /// <summary>
-    /// Used when HID device is already known.
+    /// Used when TeensyBootloaderDevice is already known.
     /// </summary>
-    private bool Reboot(HidDevice device) =>
+    private bool Reboot(TeensyBootloaderDevice device) =>
         Reboot(device, device.CreateReport());
 
     /// <summary>
     /// Used when HID report is already known.
     /// </summary>
-    private bool Reboot(HidDevice device,
-                        HidReport report)
+    private bool Reboot(TeensyBootloaderDevice device,
+                        HidReport              report)
     {
         // https://www.pjrc.com/teensy/halfkay_protocol.html
         report.Initialize(0xFF);
@@ -492,7 +493,8 @@ public class Teensy
                 
                 Factory.SafeMethod( () =>
                 {
-                    using ( var device = Utility.FindHidDevice(SerialNumber) )
+                    using ( var device =
+                        TeensyBootloaderDevice.FindDevice(SerialNumber) )
                     {
                         result = device != null
                                  ? UploadImage(image, device)
@@ -512,8 +514,8 @@ public class Teensy
     /// <summary>
     /// Actually does the upload to the HID device.
     /// </summary>
-    private UploadResults UploadImage(HexImage  image,
-                                      HidDevice device)
+    private UploadResults UploadImage(HexImage               image,
+                                      TeensyBootloaderDevice device)
     {
         var result = UploadResults.Success;
         var data =   image.Data;

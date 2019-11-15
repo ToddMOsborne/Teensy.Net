@@ -9,20 +9,26 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 /// <summary>
-/// HID native code wrappers. Much of this is based on hidlibrary.
+/// HID native code wrappers.
 /// </summary>
-internal static class HidNative
+internal static class NativeMethods
 {
+    /**************************************************************************
+                                  CONSTANTS
+    **************************************************************************/
+    private  const short DIGCF_DEVICEINTERFACE = 0x10;
+    private  const short DIGCF_PRESENT =         0x2;
     internal const short FILE_SHARE_READ =       0x1;
     internal const short FILE_SHARE_WRITE =      0x2;
     internal const uint  GENERIC_READ =          0x80000000;
     internal const uint  GENERIC_WRITE =         0x40000000;
     internal const int   INVALID_HANDLE_VALUE =  -1;
-    private  const short DIGCF_DEVICEINTERFACE = 0x10;
-    private  const short DIGCF_PRESENT =         0x2;
     internal const short OPEN_EXISTING =         3;
     private  const int   SPDRP_DEVICEDESC =      0;
 
+    /**************************************************************************
+                                  STRUCTURES
+    **************************************************************************/
     [StructLayout(LayoutKind.Sequential)]
     private struct DEVPROPKEY
     {
@@ -102,22 +108,21 @@ internal static class HidNative
         internal IntPtr Reserved;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true, CharSet = CharSet.Auto)]
-    internal static extern bool CancelIoEx(IntPtr file,
-                                           IntPtr overlapped);
-
+    /**************************************************************************
+                                WINDOWS API
+    **************************************************************************/
     [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true, CharSet = CharSet.Auto)]
     internal static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     internal static extern IntPtr CreateFile(
-        string fileName,
-        uint   desiredAccess,
-        int    shareMode,
-        ref    SECURITY_ATTRIBUTES securityAttributes,
-        int    creationDisposition,
-        int    flagsAndAttributes,
-        int    templateFile);
+        string                  fileName,
+        uint                    desiredAccess,
+        int                     shareMode,
+        ref SECURITY_ATTRIBUTES securityAttributes,
+        int                     creationDisposition,
+        int                     flagsAndAttributes,
+        int                     templateFile);
 
     [DllImport("hid.dll")]
     internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
@@ -208,13 +213,17 @@ internal static class HidNative
         int                 propertyBufferSize,
         ref int             requiredSize);
 
+    /**************************************************************************
+                                  CLASS
+    **************************************************************************/
+
     // GUID for HID.
     private static readonly Guid _hidClassGuid;
 
     /// <summary>
     /// Static constructor.
     /// </summary>
-    static HidNative()
+    static NativeMethods()
     {
         HidD_GetHidGuid(ref _hidClassGuid);
     }
@@ -232,12 +241,15 @@ internal static class HidNative
     }
     
     /// <summary>
-    /// Get list of all devices.
+    /// Get list of all Teensy devices, or limit the search to a specific
+    /// Teensy with the specified serial number.
     /// </summary>
-    internal static List<HidDevice> GetAllDevices()
+    internal static List<TeensyBootloaderDevice> GetAllDevices(
+        uint serialNumber = 0)
     {
-        var result =   new List<HidDevice>();
-        var hidClass = _hidClassGuid;
+        var result =    new List<TeensyBootloaderDevice>();
+        var keepGoing = true;
+        var hidClass =  _hidClassGuid;
 
         var deviceInfoSet = SetupDiGetClassDevs(
             ref hidClass,
@@ -250,7 +262,8 @@ internal static class HidNative
             var deviceInfoData = CreateDeviceInfoData();
             var deviceIndex =    0;
 
-            while ( SetupDiEnumDeviceInfo(deviceInfoSet,
+            while ( keepGoing &&
+                    SetupDiEnumDeviceInfo(deviceInfoSet,
                                           deviceIndex,
                                           ref deviceInfoData) )
             {
@@ -262,7 +275,8 @@ internal static class HidNative
                 deviceInterfaceData.cbSize =
                     Marshal.SizeOf(deviceInterfaceData);
 
-                while ( SetupDiEnumDeviceInterfaces(deviceInfoSet,
+                while ( keepGoing &&
+                        SetupDiEnumDeviceInterfaces(deviceInfoSet,
                                                     ref deviceInfoData,
                                                     ref hidClass,
                                                     deviceInterfaceIndex,
@@ -279,7 +293,27 @@ internal static class HidNative
                         ?? GetDeviceDescription(deviceInfoSet,
                                                 ref deviceInfoData);
 
-                    result.Add(new HidDevice(description, devicePath));
+                    var teensy = new TeensyBootloaderDevice(description,
+                                                            devicePath);
+
+                    // If not a known Teensy type, skip it.
+                    if ( teensy.TeensyType != TeensyTypes.Unknown )
+                    {
+                        if ( serialNumber == 0 ||
+                             teensy.SerialNumber == serialNumber )
+                        {
+                            result.Add(teensy);
+
+                            if ( serialNumber != 0 )
+                            {
+                                keepGoing = false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        teensy.Dispose();
+                    }
                 }
             }
 
@@ -301,14 +335,15 @@ internal static class HidNative
             var   requiredSize =      0;
             var   descriptionBuffer = new byte[1024];
 
-            var valid = SetupDiGetDeviceProperty(deviceInfoSet,
-                                                 ref devinfoData,
-                                                 ref DEVPKEY_Device_BusReportedDeviceDesc,
-                                                 ref propertyType,
-                                                 descriptionBuffer,
-                                                 descriptionBuffer.Length,
-                                                 ref requiredSize,
-                                                 0);
+            var valid = SetupDiGetDeviceProperty(
+                deviceInfoSet,
+                ref devinfoData,
+                ref DEVPKEY_Device_BusReportedDeviceDesc,
+                ref propertyType,
+                descriptionBuffer,
+                descriptionBuffer.Length,
+                ref requiredSize,
+                0);
 
             if ( valid )
             {
