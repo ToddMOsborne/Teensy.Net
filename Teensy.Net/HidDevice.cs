@@ -310,22 +310,40 @@ internal class HidDevice : IDisposable
     /// </summary>
     public bool Write(HidReport report)
     {
-        // Copy to correct buffer size.
+        // Assume success.
+        var result = true;
         var buffer = new byte[ReportLength];
 
-        // Report ID is always 0.
-        buffer[0] = 0;
-        buffer[1] = report.Data[0];
-        buffer[2] = report.Data[1];
-        buffer[3] = report.Data[2];
+        // We have the chunk the report data into segments that fit within
+        // ReportLength.
+        var reportOffset =     0;
+        var reportDataLength = report.Data.Length;
 
-        // If this fails, try again after a short delay.
-        var result = Write(buffer);
-
-        if ( !result )
+        while ( result && reportOffset < reportDataLength )
         {
-            Thread.Sleep(100);
+            // Completely populate our buffer. If there is not enough data from
+            // the report, set buffer elements to 0.
+            // Report ID is always 0. This is the first byte in the buffer.
+            buffer[0] =        0;
+            var bufferOffset = 1;
+
+            while ( bufferOffset < buffer.Length )
+            {
+                buffer[bufferOffset] = reportOffset < reportDataLength
+                                       ? report.Data[reportOffset]
+                                       : (byte)0;
+                ++bufferOffset;
+                ++reportOffset;
+            }
+
+            // If this fails, try again after a short delay.
             result = Write(buffer);
+
+            if ( !result )
+            {
+                Thread.Sleep(100);
+                result = Write(buffer);
+            }
         }
 
         return result;
@@ -349,10 +367,10 @@ internal class HidDevice : IDisposable
             uint bytesWritten = 0;
 
             result = HidNativeMethods.WriteFile(Handle,
-                                             buffer,
-                                             ReportLength,
-                                             ref bytesWritten,
-                                             IntPtr.Zero) &&
+                                                buffer,
+                                                ReportLength,
+                                                ref bytesWritten,
+                                                IntPtr.Zero) &&
                      bytesWritten == ReportLength;
         }
 
