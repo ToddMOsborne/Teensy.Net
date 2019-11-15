@@ -2,6 +2,7 @@
 {
 
 using System;
+using System.IO;
 using System.IO.Ports;
 using System.Threading;
 
@@ -123,7 +124,7 @@ public class Teensy
     /// <summary>
     /// Get the upload block size.
     /// </summary>
-    public uint BlockSize { get; }
+    internal uint BlockSize { get; }
 
     /// <summary>
     /// Change the internal state. Returns true if something actually changed.
@@ -184,7 +185,7 @@ public class Teensy
     /// <summary>
     /// Get the upload data offset.
     /// </summary>
-    public uint DataOffset { get; }
+    internal uint DataOffset { get; }
 
     /// <summary>
     /// Get the TeensyFactory object that created this Teensy.
@@ -204,58 +205,6 @@ public class Teensy
     /// Get the flash memory size.
     /// </summary>
     public uint FlashSize { get; }
-
-    /// <summary>
-    /// Set the report for uploading image information.
-    /// </summary>
-    private void InitializeUploadReport(HexImage  image,
-                                        uint      imageOffset,
-                                        HidReport report)
-    {
-        // Clear report buffer.
-        report.Initialize();
-
-        // Copy address bytes to report.
-        var address = BitConverter.GetBytes((int)imageOffset);
-
-        // There are (mostly) common.
-        report.Data[0] = address[0];
-        report.Data[1] = address[1];
-
-        switch ( TeensyType )
-        {
-            case TeensyTypes.Teensy2PlusPlus:
-            {
-                report.Data[0] = address[1];
-                report.Data[1] = address[2];
-                break;
-            }
-
-            case TeensyTypes.TeensyLc:
-            case TeensyTypes.Teensy30:
-            case TeensyTypes.Teensy31:
-            case TeensyTypes.Teensy32:
-            case TeensyTypes.Teensy35:
-            case TeensyTypes.Teensy36:
-            case TeensyTypes.Teensy40:
-            {
-                report.Data[2] = address[2];
-                break;
-            }
-        }
-        
-        // Copy data to report.
-        var reportOffset = DataOffset;
-        var end =          BlockSize + DataOffset;
-        
-        while ( reportOffset < end )
-        {
-            report.Data[reportOffset] = image.Data[imageOffset];
-            
-            ++imageOffset;
-            ++reportOffset;
-        }
-    }
 
     /// <summary>
     /// Get the type of Microcontroller chip on the Teensy device.
@@ -351,9 +300,9 @@ public class Teensy
     /// Fires the FeedbackProvided event handlers. If status is null, a
     /// string describing the upload will be used instead.
     /// </summary>
-    private void ProvideFeedback(uint   bytesUploaded,
-                                 uint   uploadSize,
-                                 string status = null)
+    internal void ProvideFeedback(uint   bytesUploaded,
+                                  uint   uploadSize,
+                                  string status = null)
     {
         var eh = FeedbackProvided;
 
@@ -377,7 +326,7 @@ public class Teensy
     /// <summary>
     /// Provide feedback that is just a string.
     /// </summary>
-    private void ProvideFeedback(string status) =>
+    internal void ProvideFeedback(string status) =>
         ProvideFeedback(0, 0, status);
 
     /// <summary>
@@ -406,21 +355,11 @@ public class Teensy
     /// <summary>
     /// Used when TeensyBootloaderDevice is already known.
     /// </summary>
-    private bool Reboot(TeensyBootloaderDevice device) =>
-        Reboot(device, device.CreateReport());
-
-    /// <summary>
-    /// Used when HID report is already known.
-    /// </summary>
-    private bool Reboot(TeensyBootloaderDevice device,
-                        HidReport              report)
+    private bool Reboot(TeensyBootloaderDevice device)
     {
-        // https://www.pjrc.com/teensy/halfkay_protocol.html
-        report.Initialize(0xFF);
-
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
-        var result = device.WriteReport(report);
+        var result = device.Write(new TeensyRebootReport());
 
         if ( result )
         {
@@ -479,11 +418,29 @@ public class Teensy
     /// bring the Teensy back online, and will be done automatically by this
     /// method.
     /// </summary>
+    public UploadResults UploadImage(string hexFileName)
+    {
+        var result = UploadResults.ErrorInvalidHexImage;
+
+        if ( !string.IsNullOrWhiteSpace(hexFileName) &&
+             File.Exists(hexFileName) )
+        {
+            result = UploadImage(new HexImage(this, hexFileName));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Upload the image to the Teensy. A reboot after upload is required to
+    /// bring the Teensy back online, and will be done automatically by this
+    /// method.
+    /// </summary>
     public UploadResults UploadImage(HexImage image)
     {
         UploadResults result;
 
-        if ( image != null && image.IsValid )
+        if ( image.IsValid )
         {
             result = UploadResults.ErrorBootLoaderNotAvailable;
             
@@ -496,9 +453,22 @@ public class Teensy
                     using ( var device =
                         TeensyBootloaderDevice.FindDevice(SerialNumber) )
                     {
-                        result = device != null
-                                 ? UploadImage(image, device)
-                                 : UploadResults.ErrorFindTeensy;
+                        if ( device != null )
+                        {
+                            result = device.Upload(this, image);
+
+                            // Always reboot now.
+                            var rebooted = Reboot(device);
+
+                            if ( result == UploadResults.Success && !rebooted )
+                            {
+                                result = UploadResults.SuccessFailedReboot;
+                            }
+                        }
+                        else
+                        {
+                            result = UploadResults.ErrorFindTeensy;
+                        }
                     }
                 });
             }
@@ -507,93 +477,6 @@ public class Teensy
         {
             result = UploadResults.ErrorInvalidHexImage;
         }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Actually does the upload to the HID device.
-    /// </summary>
-    private UploadResults UploadImage(HexImage               image,
-                                      TeensyBootloaderDevice device)
-    {
-        var result = UploadResults.Success;
-        var data =   image.Data;
-        var length = (uint)data.Length;
-
-        bool IsEmptyBlock(uint offset)
-        {
-            var empty = true;
-            var end =   offset + BlockSize;
-
-            while ( offset < end )
-            {
-                if ( data[offset] != 0xFF )
-                {
-                    empty = false;
-                    break;
-                }
-
-                ++offset;
-            }
-
-            return empty;
-        }
-
-        var report = new HidReport(BlockSize + DataOffset + 1);
-
-        for ( uint offset = 0; offset < length; offset += BlockSize )
-        {
-            // If the block is empty, skip it. This does not apply to the first
-            // block though.
-            if ( offset == 0 || !IsEmptyBlock(offset) )
-            {
-                if ( offset == 0 )
-                {
-                    ProvideFeedback(
-                        $"Erasing {Constants.TeensyWord} Flash Memory");
-                }
-
-                InitializeUploadReport(image, offset, report);
-
-                // If this fails, try again after a short delay.
-                var written = device.WriteReport(report);
-
-                if ( !written )
-                {
-                    Thread.Sleep(100);
-                    written = device.WriteReport(report);
-                }
-
-                if ( written )
-                {
-                    // The first write erases the chip and needs a little
-                    // longer to complete. Allow it 5 seconds. After that, use
-                    // 1/2 second. This is taken from the code for teensy
-                    // loader at:
-                    // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
-                    Thread.Sleep(offset == 0 ? 5000 : 500);
-                }
-                else
-                {
-                    result = UploadResults.ErrorUpload;
-                    break;
-                }
-            }
-
-            ProvideFeedback(offset, length);
-        }
-
-        // Always reboot now.
-        var rebooted = Reboot(device, report);
-
-        if ( result == UploadResults.Success && !rebooted )
-        {
-            result = UploadResults.SuccessFailedReboot;
-        }
-        
-        // One final callback for 100%?
-        ProvideFeedback(length, length);
 
         return result;
     }

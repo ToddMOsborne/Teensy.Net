@@ -6,7 +6,7 @@ namespace Teensy.Net
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
+using System.Threading;
 
 /// <summary>
 /// HID native code wrappers.
@@ -24,25 +24,10 @@ internal static class NativeMethods
     internal const uint  GENERIC_WRITE =         0x40000000;
     internal const int   INVALID_HANDLE_VALUE =  -1;
     internal const short OPEN_EXISTING =         3;
-    private  const int   SPDRP_DEVICEDESC =      0;
 
     /**************************************************************************
                                   STRUCTURES
     **************************************************************************/
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DEVPROPKEY
-    {
-        public Guid fmtid;
-        public ulong pid;
-    }
-
-    private static DEVPROPKEY DEVPKEY_Device_BusReportedDeviceDesc =
-        new DEVPROPKEY
-        {
-            fmtid = new Guid(0x540b947e, 0x8b40, 0x45bc, 0xa8, 0xa2, 0x6a, 0x0b, 0x89, 0x4c, 0xbd, 0xa2),
-            pid =   4
-        };
-
     [StructLayout(LayoutKind.Sequential)]
     internal struct HIDD_ATTRIBUTES
     {
@@ -124,6 +109,14 @@ internal static class NativeMethods
         int                     flagsAndAttributes,
         int                     templateFile);
 
+    [DllImport("kernel32.dll")]
+    internal static extern bool WriteFile(
+        IntPtr                    file,
+        byte[]                    buffer,
+        uint                      numberOfBytesToWrite,
+        out uint                  numberOfBytesWritten,
+        [In] ref NativeOverlapped overlapped);
+
     [DllImport("hid.dll")]
     internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
 
@@ -191,27 +184,6 @@ internal static class NativeMethods
         int                                 deviceInterfaceDetailDataSize,
         ref int                             requiredSize,
         IntPtr                              deviceInfoData);
-
-    [DllImport("setupapi.dll", EntryPoint = "SetupDiGetDevicePropertyW", SetLastError = true)]
-    private static extern bool SetupDiGetDeviceProperty(
-        IntPtr              deviceInfo,
-        ref SP_DEVINFO_DATA deviceInfoData,
-        ref DEVPROPKEY      propkey,
-        ref ulong           propertyDataType,
-        byte[]              propertyBuffer,
-        int                 propertyBufferSize,
-        ref int             requiredSize,
-        uint                flags);
-
-    [DllImport("setupapi.dll", EntryPoint = "SetupDiGetDeviceRegistryProperty")]
-    private static extern bool SetupDiGetDeviceRegistryProperty(
-        IntPtr              deviceInfoSet,
-        ref SP_DEVINFO_DATA deviceInfoData,
-        int                 propertyVal,
-        ref int             propertyRegDataType,
-        byte[]              propertyBuffer,
-        int                 propertyBufferSize,
-        ref int             requiredSize);
 
     /**************************************************************************
                                   CLASS
@@ -284,17 +256,8 @@ internal static class NativeMethods
                 {
                     ++deviceInterfaceIndex;
 
-                    var devicePath = GetDevicePath(deviceInfoSet,
-                                                   deviceInterfaceData);
-
-                    var description =
-                        GetBusReportedDeviceDescription(deviceInfoSet,
-                                                        ref deviceInfoData)
-                        ?? GetDeviceDescription(deviceInfoSet,
-                                                ref deviceInfoData);
-
-                    var teensy = new TeensyBootloaderDevice(description,
-                                                            devicePath);
+                    var teensy = new TeensyBootloaderDevice(
+                        GetDevicePath(deviceInfoSet, deviceInterfaceData));
 
                     // If not a known Teensy type, skip it.
                     if ( teensy.TeensyType != TeensyTypes.Unknown )
@@ -319,60 +282,6 @@ internal static class NativeMethods
 
             SetupDiDestroyDeviceInfoList(deviceInfoSet);
         }
-
-        return result;
-    }
-
-    private static string GetBusReportedDeviceDescription(
-        IntPtr              deviceInfoSet,
-        ref SP_DEVINFO_DATA devinfoData)
-    {
-        string result = null;
-        
-        if ( Environment.OSVersion.Version.Major > 5 )
-        {
-            ulong propertyType =      0;
-            var   requiredSize =      0;
-            var   descriptionBuffer = new byte[1024];
-
-            var valid = SetupDiGetDeviceProperty(
-                deviceInfoSet,
-                ref devinfoData,
-                ref DEVPKEY_Device_BusReportedDeviceDesc,
-                ref propertyType,
-                descriptionBuffer,
-                descriptionBuffer.Length,
-                ref requiredSize,
-                0);
-
-            if ( valid )
-            {
-                result = Encoding.Unicode.GetString(descriptionBuffer);
-                result = result.Remove(result.IndexOf((char)0));
-            }
-        }
-
-        return result;
-    }
-
-    private static string GetDeviceDescription(
-        IntPtr              deviceInfoSet,
-        ref SP_DEVINFO_DATA devinfoData)
-    {
-        var descriptionBuffer = new byte[1024];
-        var requiredSize =      0;
-        var type =              0;
-
-        SetupDiGetDeviceRegistryProperty(deviceInfoSet,
-                                         ref devinfoData,
-                                         SPDRP_DEVICEDESC,
-                                         ref type,
-                                         descriptionBuffer,
-                                         descriptionBuffer.Length,
-                                         ref requiredSize);
-
-        var result = Encoding.UTF8.GetString(descriptionBuffer);
-        result = result.Remove(result.IndexOf((char)0));
 
         return result;
     }

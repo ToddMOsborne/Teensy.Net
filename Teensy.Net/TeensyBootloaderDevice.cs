@@ -4,6 +4,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 /// <summary>
 /// A single Teensy that is running the bootloader. In this state, it is not
@@ -13,12 +14,10 @@ using System.Text;
 internal class TeensyBootloaderDevice : IDisposable
 {
     /// <summary>
-    /// Constructor must be give name and path to device.
+    /// Constructoror must be given path to device.
     /// </summary>
-    public TeensyBootloaderDevice(string name,
-                                  string path)
+    public TeensyBootloaderDevice(string path)
     {
-        Name = name;
         Path = path;
 
         // Get Vendor and Product IDs.
@@ -118,14 +117,6 @@ internal class TeensyBootloaderDevice : IDisposable
     }
 
     /// <summary>
-    /// Create a new report for this device.
-    /// </summary>
-    public HidReport CreateReport()
-    {
-        return new HidReport(1024);
-    }
-
-    /// <summary>
     /// Close device, as needed.
     /// </summary>
     public void Dispose() => Close();
@@ -155,11 +146,6 @@ internal class TeensyBootloaderDevice : IDisposable
     /// write access.
     /// </summary>
     private bool IsOpenReadWrite { get; set; }
-
-    /// <summary>
-    /// Get the name of this device.
-    /// </summary>
-    private string Name { get; }
 
     /// <summary>
     /// Open the device, as needed.
@@ -239,17 +225,124 @@ internal class TeensyBootloaderDevice : IDisposable
     public TeensyTypes TeensyType { get; } = TeensyTypes.Unknown;
 
     /// <summary>
-    /// Write report to device.
+    /// Upload an image to the Teensy.
     /// </summary>
-    public bool WriteReport(HidReport report)
+    public UploadResults Upload(Teensy   teensy,
+                                HexImage image)
     {
-        return false;
+        // Bail?
+        if ( !image.IsValid )
+        {
+            return UploadResults.ErrorInvalidHexImage;
+        }
+
+        var result = UploadResults.Success;
+        var data =   image.Data;
+        var length = (uint)data.Length;
+
+        bool IsEmptyBlock(uint offset)
+        {
+            var empty = true;
+            var end =   offset + teensy.BlockSize;
+
+            while ( offset < end )
+            {
+                if ( data[offset] != 0xFF )
+                {
+                    empty = false;
+                    break;
+                }
+
+                ++offset;
+            }
+
+            return empty;
+        }
+
+        var report = new TeensyUploadReport(teensy, image);
+
+        for ( uint offset = 0; offset < length; offset += teensy.BlockSize )
+        {
+            // If the block is empty, skip it. This does not apply to the first
+            // block though.
+            if ( offset == 0 || !IsEmptyBlock(offset) )
+            {
+                if ( offset == 0 )
+                {
+                    teensy.ProvideFeedback(
+                        $"Erasing {Constants.TeensyWord} Flash Memory");
+                }
+
+                report.InitializeImageBlock(offset);
+
+                if ( Write(report) )
+                {
+                    // The first write erases the chip and needs a little
+                    // longer to complete. Allow it 5 seconds. After that, use
+                    // 1/2 second. This is taken from the code for teensy
+                    // loader at:
+                    // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
+                    Thread.Sleep(offset == 0 ? 5000 : 500);
+                }
+                else
+                {
+                    result = UploadResults.ErrorUpload;
+                    break;
+                }
+            }
+
+            teensy.ProvideFeedback(offset, length);
+        }
+
+        // One final callback for 100%?
+        teensy.ProvideFeedback(length, length);
+
+        return result;
     }
 
     /// <summary>
     /// Get the Vendor ID.
     /// </summary>
-    public ushort VendorId { get; private set; }
+    public ushort VendorId { get; }
+
+    /// <summary>
+    /// Write report data to the bootloader.
+    /// </summary>
+    public bool Write(TeensyReport report)
+    {
+        // If this fails, try again after a short delay.
+        var result = WriteInternal(report);
+
+        if ( !result )
+        {
+            Thread.Sleep(100);
+            result = WriteInternal(report);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Write report data to the bootloader.
+    /// </summary>
+    private bool WriteInternal(TeensyReport report)
+    {
+        var result = Open();
+
+        if ( result )
+        {
+            var overlapped = new NativeOverlapped();
+            
+            result = NativeMethods.WriteFile(Handle,
+                                             report.Data,
+                                             (uint)report.Data.Length,
+                                             out var bytesWritten,
+                                             ref overlapped) &&
+                     bytesWritten == report.Data.Length;
+        }
+
+        return result;
+    }
 }
 
 }
