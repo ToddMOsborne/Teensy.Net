@@ -4,16 +4,16 @@
 using System;
 
 /// <summary>
-/// This is a TeensyReport used for uploading firmware.
+/// This is a HID report used for uploading firmware.
 /// </summary>
-internal class TeensyUploadReport : TeensyReport
+internal class HidUploadReport : HidReport
 {
     /// <summary>
     /// Constructor must be initialized with the Teensy this report is for and
     /// the HexImage object to upload.
     /// </summary>
-    public TeensyUploadReport(Teensy   teensy,
-                              HexImage image)
+    public HidUploadReport(Teensy   teensy,
+                           HexImage image)
         : base(teensy.BlockSize + teensy.DataOffset)
     {
         Teensy = teensy;

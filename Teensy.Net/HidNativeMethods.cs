@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 /// <summary>
 /// HID native code wrappers.
 /// </summary>
-internal static class NativeMethods
+internal static class HidNativeMethods
 {
     /**************************************************************************
                                   CONSTANTS
@@ -181,7 +181,9 @@ internal static class NativeMethods
         ref int                             requiredSize,
         IntPtr                              deviceInfoData);
 
-    [DllImport("setupapi.dll", CharSet = CharSet.Auto, EntryPoint = "SetupDiGetDeviceInterfaceDetail")]
+    [DllImport("setupapi.dll",
+               CharSet = CharSet.Auto,
+               EntryPoint = "SetupDiGetDeviceInterfaceDetail")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern void SetupDiGetDeviceInterfaceDetailBuffer(
         IntPtr                       deviceInfoSet,
@@ -201,7 +203,7 @@ internal static class NativeMethods
     /// <summary>
     /// Static constructor.
     /// </summary>
-    static NativeMethods()
+    static HidNativeMethods()
     {
         HidD_GetHidGuid(ref _hidClassGuid);
     }
@@ -222,10 +224,10 @@ internal static class NativeMethods
     /// Get list of all Teensy devices, or limit the search to a specific
     /// Teensy with the specified serial number.
     /// </summary>
-    internal static List<TeensyBootloaderDevice> GetAllDevices(
+    internal static List<HidDevice> GetAllDevices(
         uint serialNumber = 0)
     {
-        var result =    new List<TeensyBootloaderDevice>();
+        var result =    new List<HidDevice>();
         var keepGoing = true;
         var hidClass =  _hidClassGuid;
 
@@ -267,7 +269,7 @@ internal static class NativeMethods
 
                     if ( path != null )
                     {
-                        var teensy = new TeensyBootloaderDevice(path);
+                        var teensy = new HidDevice(path);
 
                         // If not a known Teensy type, skip it.
                         if ( teensy.TeensyType != TeensyTypes.Unknown )

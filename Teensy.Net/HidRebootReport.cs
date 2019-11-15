@@ -2,14 +2,14 @@
 {
 
 /// <summary>
-/// This is a TeensyReport used for rebooting devices.
+/// This is a HID report used for rebooting devices.
 /// </summary>
-internal class TeensyRebootReport : TeensyReport
+internal class HidRebootReport : HidReport
 {
     /// <summary>
     /// Default constructor.
     /// </summary>
-    public TeensyRebootReport() : base(3)
+    public HidRebootReport() : base(3)
     {
         // https://www.pjrc.com/teensy/halfkay_protocol.html
         Initialize(0xFF);

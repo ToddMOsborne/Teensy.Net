@@ -342,7 +342,7 @@ public class Teensy
             Factory.SafeMethod( () =>
             {
                 using ( var device =
-                    TeensyBootloaderDevice.FindDevice(SerialNumber) )
+                    HidDevice.FindDevice(SerialNumber) )
                 {
                     result = device != null && Reboot(device);
                 }
@@ -355,11 +355,11 @@ public class Teensy
     /// <summary>
     /// Used when TeensyBootloaderDevice is already known.
     /// </summary>
-    private bool Reboot(TeensyBootloaderDevice device)
+    private bool Reboot(HidDevice device)
     {
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
-        var result = device.Write(new TeensyRebootReport());
+        var result = device.Write(new HidRebootReport());
 
         if ( result )
         {
@@ -438,7 +438,7 @@ public class Teensy
     /// </summary>
     public UploadResults UploadImage(HexImage image)
     {
-        UploadResults result;
+        var result = UploadResults.ErrorInvalidHexImage;
 
         if ( image.IsValid )
         {
@@ -451,7 +451,7 @@ public class Teensy
                 Factory.SafeMethod( () =>
                 {
                     using ( var device =
-                        TeensyBootloaderDevice.FindDevice(SerialNumber) )
+                        HidDevice.FindDevice(SerialNumber) )
                     {
                         if ( device != null )
                         {
@@ -472,10 +472,6 @@ public class Teensy
                     }
                 });
             }
-        }
-        else
-        {
-            result = UploadResults.ErrorInvalidHexImage;
         }
 
         return result;

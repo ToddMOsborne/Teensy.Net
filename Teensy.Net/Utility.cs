@@ -4,7 +4,7 @@
 /// <summary>
 /// Static helper methods.
 /// </summary>
-public static class Utility
+internal static class Utility
 {
     /// <summary>
     /// If serialNumber is not invalid, multiply be 10.

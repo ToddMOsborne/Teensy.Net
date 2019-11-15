@@ -234,14 +234,14 @@ public class TeensyFactory : IDisposable
                     }
                 }
             }
+            // Device is running bootloader? Have to use HID.
             else if ( id == Constants.BootloaderId )
             {
                 serialNumber = Utility.FixSerialNumber(
                     Convert.ToUInt32(parts[2], 16));
 
                 // Find Teensy running bootloader.
-                using ( var teensy =
-                    TeensyBootloaderDevice.FindDevice(serialNumber) )
+                using ( var teensy = HidDevice.FindDevice(serialNumber) )
                 {
                     if ( teensy != null )
                     {
@@ -447,8 +447,8 @@ public class TeensyFactory : IDisposable
         // We should ignore those.
         SafeMethod( () =>
         {
-            teensy = CreateTeensy(
-                                  (ManagementBaseObject)e.NewEvent["TargetInstance"]);
+            teensy = CreateTeensy((ManagementBaseObject)
+                e.NewEvent["TargetInstance"]);
 
         }, false);
 
@@ -463,8 +463,8 @@ public class TeensyFactory : IDisposable
                 if ( existing != null )
                 {
                     existing.ChangeState(
-                                         added ? teensy.UsbType : UsbTypes.Disconnected,
-                                         teensy.PortName);
+                        added ? teensy.UsbType : UsbTypes.Disconnected,
+                        teensy.PortName);
                 }
                 // Add new Teensy?
                 else if ( added )

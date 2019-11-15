@@ -40,16 +40,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Constants.cs" />
-    <Compile Include="TeensyBootloaderDevice.cs" />
-    <Compile Include="NativeMethods.cs" />
-    <Compile Include="TeensyRebootReport.cs" />
-    <Compile Include="TeensyReport.cs" />
+    <Compile Include="HidDevice.cs" />
+    <Compile Include="HidNativeMethods.cs" />
+    <Compile Include="HidRebootReport.cs" />
+    <Compile Include="HidReport.cs" />
     <Compile Include="TeensyFactory.cs" />
     <Compile Include="HexImage.cs" />
     <Compile Include="HexImageException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Teensy.cs" />
-    <Compile Include="TeensyUploadReport.cs" />
+    <Compile Include="HidUploadReport.cs" />
     <Compile Include="Utility.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

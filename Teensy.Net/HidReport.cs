@@ -2,17 +2,16 @@
 {
 
 /// <summary>
-/// A TeensyReport is a HID report wrapper for communicating with
-/// TeensyBootloader devices. It is used to upload firmware to a Teensy device
-/// and reboot it. This is the common base class used by TeensyRebootReport and
-/// TeensyUploadReport.
+/// This is a HID report wrapper for communicating with HidDevices. It is used
+/// to upload firmware to a device and reboot it. This is the common base
+/// class used by HidReport and HidUploadReport.
 /// </summary>
-internal class TeensyReport
+internal class HidReport
 {
     /// <summary>
     /// Protected constructor must specify the data length.
     /// </summary>
-    protected TeensyReport(uint dataLength)
+    protected HidReport(uint dataLength)
     {
         Data = new byte[dataLength];
         Initialize();
