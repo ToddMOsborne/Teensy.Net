@@ -28,72 +28,75 @@ internal class TeensyBootloaderDevice : IDisposable
             
             if ( NativeMethods.HidD_GetAttributes(Handle, ref attributes) )
             {
-                ProductId = attributes.ProductID;
-                VendorId =  attributes.VendorID;
-            }
-
-            var capabilities = default(NativeMethods.HIDP_CAPS);
-            var pointer =      default(IntPtr);
-
-            if ( NativeMethods.HidD_GetPreparsedData(Handle, ref pointer) )
-            {
-                NativeMethods.HidP_GetCaps(pointer, ref capabilities);
-                NativeMethods.HidD_FreePreparsedData(pointer);
-
-                switch ( capabilities.Usage )
+                // Only interested in Teeny bootloaders.
+                if ( attributes.ProductID == Constants.BootloaderId &&
+                     attributes.VendorID  == Constants.VendorId )
                 {
-                    case 0x1B:
-                    {
-                        TeensyType = TeensyTypes.Teensy2;
-                        break;
-                    }
+                    var capabilities = default(NativeMethods.HIDP_CAPS);
+                    var pointer =      default(IntPtr);
 
-                    case 0x1C:
+                    if ( NativeMethods.HidD_GetPreparsedData(Handle,
+                                                             ref pointer) )
                     {
-                        TeensyType = TeensyTypes.Teensy2PlusPlus;
-                        break;
-                    }
+                        NativeMethods.HidP_GetCaps(pointer, ref capabilities);
+                        NativeMethods.HidD_FreePreparsedData(pointer);
 
-                    case 0x1D:
-                    {
-                        TeensyType = TeensyTypes.Teensy30;
-                        break;
-                    }
+                        switch ( capabilities.Usage )
+                        {
+                            case 0x1B:
+                            {
+                                TeensyType = TeensyTypes.Teensy2;
+                                break;
+                            }
 
-                    case 0x1E:
-                    {
-                        TeensyType = TeensyTypes.Teensy31;
-                        break;
-                    }
+                            case 0x1C:
+                            {
+                                TeensyType = TeensyTypes.Teensy2PlusPlus;
+                                break;
+                            }
 
-                    case 0x20:
-                    {
-                        TeensyType = TeensyTypes.TeensyLc;
-                        break;
-                    }
+                            case 0x1D:
+                            {
+                                TeensyType = TeensyTypes.Teensy30;
+                                break;
+                            }
 
-                    case 0x21:
-                    {
-                        TeensyType = TeensyTypes.Teensy32;
-                        break;
-                    }
-                    
-                    case 0x1F:
-                    {
-                        TeensyType = TeensyTypes.Teensy35;
-                        break;
-                    }
+                            case 0x1E:
+                            {
+                                TeensyType = TeensyTypes.Teensy31;
+                                break;
+                            }
 
-                    case 0x22:
-                    {
-                        TeensyType = TeensyTypes.Teensy36;
-                        break;
-                    }
+                            case 0x20:
+                            {
+                                TeensyType = TeensyTypes.TeensyLc;
+                                break;
+                            }
 
-                    case 0x24:
-                    {
-                        TeensyType = TeensyTypes.Teensy40;
-                        break;
+                            case 0x21:
+                            {
+                                TeensyType = TeensyTypes.Teensy32;
+                                break;
+                            }
+                            
+                            case 0x1F:
+                            {
+                                TeensyType = TeensyTypes.Teensy35;
+                                break;
+                            }
+
+                            case 0x22:
+                            {
+                                TeensyType = TeensyTypes.Teensy36;
+                                break;
+                            }
+
+                            case 0x24:
+                            {
+                                TeensyType = TeensyTypes.Teensy40;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -190,11 +193,6 @@ internal class TeensyBootloaderDevice : IDisposable
     private string Path { get; }
 
     /// <summary>
-    /// Get the Product ID.
-    /// </summary>
-    public ushort ProductId { get; private set; }
-
-    /// <summary>
     /// Get the serial number of this device.
     /// </summary>
     public uint SerialNumber
@@ -206,8 +204,8 @@ internal class TeensyBootloaderDevice : IDisposable
                 var data = new byte[254];
                 
                 if ( NativeMethods.HidD_GetSerialNumberString(Handle,
-                                                          ref data[0],
-                                                          data.Length) )
+                                                              ref data[0],
+                                                              data.Length) )
                 {
                     _serialNumber = Utility.FixSerialNumber(Convert.ToUInt32(
                         Encoding.Unicode.GetString(data).TrimEnd('\0'), 16));
@@ -299,11 +297,6 @@ internal class TeensyBootloaderDevice : IDisposable
 
         return result;
     }
-
-    /// <summary>
-    /// Get the Vendor ID.
-    /// </summary>
-    public ushort VendorId { get; }
 
     /// <summary>
     /// Write report data to the bootloader.
