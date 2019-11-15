@@ -242,9 +242,9 @@ public class TeensyFactory : IDisposable
                     Convert.ToUInt32(parts[2], 16));
 
                 // Find board running HalfKay.
-                var mcu = Utility.FindHidDevice(serialNumber);
+                var teensy = Utility.FindHidDevice(serialNumber);
 
-                switch ( mcu?.Capabilities.Usage )
+                switch ( teensy?.BootloaderId )
                 {
                     case 0x1B:
                     {

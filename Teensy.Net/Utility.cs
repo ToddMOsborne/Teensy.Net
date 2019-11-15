@@ -1,10 +1,6 @@
 ﻿namespace Teensy.Net
 {
 
-using System;
-using System.Text;
-using HidLibrary;
-
 /// <summary>
 /// Static helper methods.
 /// </summary>
@@ -13,28 +9,10 @@ public static class Utility
     /// <summary>
     /// Given a serial number, find the HID device.
     /// </summary>
-    public static HidDevice FindHidDevice(uint serialNumber)
+    internal static HidDevice FindHidDevice(uint serialNumber)
     {
-        HidDevice result = null;
-
-        foreach ( var device in HidDevices.Enumerate(
-             (int)Constants.VendorId,
-             (int)Constants.BootloaderId) )
-        {
-            device.ReadSerialNumber(out var snBytes);
-
-            var testSerialNumber = FixSerialNumber(Convert.ToUInt32(
-                Encoding.Unicode.GetString(snBytes).TrimEnd('\0'),
-                16));
-
-            if ( testSerialNumber == serialNumber )
-            {
-                result = device;
-                break;
-            }
-        }
-
-        return result;
+        var list = HidDevice.GetTeensies(serialNumber);
+        return list.Count > 0 ? list[0] : null;
     }
 
     /// <summary>

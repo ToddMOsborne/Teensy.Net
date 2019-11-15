@@ -4,7 +4,6 @@
 using System;
 using System.IO.Ports;
 using System.Threading;
-using HidLibrary;
 
 /// <summary>
 /// A single Teensy connected via USB.
@@ -207,18 +206,6 @@ public class Teensy
     public uint FlashSize { get; }
 
     /// <summary>
-    /// Initialize a HID report.
-    /// </summary>
-    private static void InitializeReport(HidReport report)
-    {
-        // Clear report buffer.
-        for ( var i = 0; i < report.Data.Length; i++ )
-        {
-            report.Data[0] = 0;
-        }
-    }
-
-    /// <summary>
     /// Set the report for uploading image information.
     /// </summary>
     private void InitializeUploadReport(HexImage  image,
@@ -226,7 +213,7 @@ public class Teensy
                                         HidReport report)
     {
         // Clear report buffer.
-        InitializeReport(report);
+        report.Initialize();
 
         // Copy address bytes to report.
         var address = BitConverter.GetBytes((int)imageOffset);
@@ -418,18 +405,17 @@ public class Teensy
     /// <summary>
     /// Used when HID device is already known.
     /// </summary>
-    private bool Reboot(IHidDevice device) =>
+    private bool Reboot(HidDevice device) =>
         Reboot(device, device.CreateReport());
 
     /// <summary>
     /// Used when HID report is already known.
     /// </summary>
-    private bool Reboot(IHidDevice device,
-                        HidReport  report)
+    private bool Reboot(HidDevice device,
+                        HidReport report)
     {
         // https://www.pjrc.com/teensy/halfkay_protocol.html
-        InitializeReport(report);
-        report.Data[0] = report.Data[1] = report.Data[2] = 0xFF;
+        report.Initialize(0xFF);
 
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
@@ -526,8 +512,8 @@ public class Teensy
     /// <summary>
     /// Actually does the upload to the HID device.
     /// </summary>
-    private UploadResults UploadImage(HexImage   image,
-                                      IHidDevice device)
+    private UploadResults UploadImage(HexImage  image,
+                                      HidDevice device)
     {
         var result = UploadResults.Success;
         var data =   image.Data;
@@ -552,7 +538,7 @@ public class Teensy
             return empty;
         }
 
-        var report = new HidReport((int)(BlockSize + DataOffset + 1));
+        var report = new HidReport(BlockSize + DataOffset + 1);
 
         for ( uint offset = 0; offset < length; offset += BlockSize )
         {
