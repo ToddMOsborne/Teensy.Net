@@ -14,7 +14,7 @@ internal class TeensyUploadReport : TeensyReport
     /// </summary>
     public TeensyUploadReport(Teensy   teensy,
                               HexImage image)
-        : base(teensy.BlockSize + teensy.DataOffset + 1)
+        : base(teensy.BlockSize + teensy.DataOffset)
     {
         Teensy = teensy;
         Image =  image;

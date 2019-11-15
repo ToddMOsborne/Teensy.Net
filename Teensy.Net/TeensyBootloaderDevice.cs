@@ -38,63 +38,71 @@ internal class TeensyBootloaderDevice : IDisposable
                     if ( NativeMethods.HidD_GetPreparsedData(Handle,
                                                              ref pointer) )
                     {
-                        NativeMethods.HidP_GetCaps(pointer, ref capabilities);
-                        NativeMethods.HidD_FreePreparsedData(pointer);
-
-                        switch ( capabilities.Usage )
+                        if ( NativeMethods.HidP_GetCaps(
+                            pointer,
+                            ref capabilities) ==
+                                NativeMethods.HIDP_STATUS_SUCCESS )
                         {
-                            case 0x1B:
-                            {
-                                TeensyType = TeensyTypes.Teensy2;
-                                break;
-                            }
+                            NativeMethods.HidD_FreePreparsedData(pointer);
 
-                            case 0x1C:
-                            {
-                                TeensyType = TeensyTypes.Teensy2PlusPlus;
-                                break;
-                            }
+                            ReportLength =
+                                (ushort)capabilities.OutputReportByteLength;
 
-                            case 0x1D:
+                            switch ( capabilities.Usage )
                             {
-                                TeensyType = TeensyTypes.Teensy30;
-                                break;
-                            }
+                                case 0x1B:
+                                {
+                                    TeensyType = TeensyTypes.Teensy2;
+                                    break;
+                                }
 
-                            case 0x1E:
-                            {
-                                TeensyType = TeensyTypes.Teensy31;
-                                break;
-                            }
+                                case 0x1C:
+                                {
+                                    TeensyType = TeensyTypes.Teensy2PlusPlus;
+                                    break;
+                                }
 
-                            case 0x20:
-                            {
-                                TeensyType = TeensyTypes.TeensyLc;
-                                break;
-                            }
+                                case 0x1D:
+                                {
+                                    TeensyType = TeensyTypes.Teensy30;
+                                    break;
+                                }
 
-                            case 0x21:
-                            {
-                                TeensyType = TeensyTypes.Teensy32;
-                                break;
-                            }
-                            
-                            case 0x1F:
-                            {
-                                TeensyType = TeensyTypes.Teensy35;
-                                break;
-                            }
+                                case 0x1E:
+                                {
+                                    TeensyType = TeensyTypes.Teensy31;
+                                    break;
+                                }
 
-                            case 0x22:
-                            {
-                                TeensyType = TeensyTypes.Teensy36;
-                                break;
-                            }
+                                case 0x20:
+                                {
+                                    TeensyType = TeensyTypes.TeensyLc;
+                                    break;
+                                }
 
-                            case 0x24:
-                            {
-                                TeensyType = TeensyTypes.Teensy40;
-                                break;
+                                case 0x21:
+                                {
+                                    TeensyType = TeensyTypes.Teensy32;
+                                    break;
+                                }
+                                
+                                case 0x1F:
+                                {
+                                    TeensyType = TeensyTypes.Teensy35;
+                                    break;
+                                }
+
+                                case 0x22:
+                                {
+                                    TeensyType = TeensyTypes.Teensy36;
+                                    break;
+                                }
+
+                                case 0x24:
+                                {
+                                    TeensyType = TeensyTypes.Teensy40;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -163,23 +171,16 @@ internal class TeensyBootloaderDevice : IDisposable
 
         if ( !IsOpen )
         {
-            var security = new NativeMethods.SECURITY_ATTRIBUTES
-            {
-                lpSecurityDescriptor = IntPtr.Zero,
-                bInheritHandle =       true
-            };
-
-            security.nLength = Marshal.SizeOf(security);
-
             Handle = NativeMethods.CreateFile(
                 Path,
-                readWrite ? NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE
+                readWrite ? NativeMethods.GENERIC_READ |
+                            NativeMethods.GENERIC_WRITE
                           : 0,
                 NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
-                ref security,
+                IntPtr.Zero,
                 NativeMethods.OPEN_EXISTING,
                 0,
-                0);
+                IntPtr.Zero);
 
             IsOpenReadWrite = readWrite;
         }
@@ -191,6 +192,11 @@ internal class TeensyBootloaderDevice : IDisposable
     /// Get the path to this device.
     /// </summary>
     private string Path { get; }
+
+    /// <summary>
+    /// The required output report length.
+    /// </summary>
+    private ushort ReportLength { get; }
 
     /// <summary>
     /// Get the serial number of this device.
@@ -303,13 +309,22 @@ internal class TeensyBootloaderDevice : IDisposable
     /// </summary>
     public bool Write(TeensyReport report)
     {
+        // Copy to correct buffer size.
+        var buffer = new byte[ReportLength];
+
+        // Report ID is always 0.
+        buffer[0] = 0;
+        buffer[1] = report.Data[0];
+        buffer[2] = report.Data[1];
+        buffer[3] = report.Data[2];
+
         // If this fails, try again after a short delay.
-        var result = WriteInternal(report);
+        var result = Write(buffer);
 
         if ( !result )
         {
             Thread.Sleep(100);
-            result = WriteInternal(report);
+            result = Write(buffer);
         }
 
         return result;
@@ -318,20 +333,26 @@ internal class TeensyBootloaderDevice : IDisposable
     /// <summary>
     /// Write report data to the bootloader.
     /// </summary>
-    private bool WriteInternal(TeensyReport report)
+    private bool Write(byte[] buffer)
     {
+        if ( buffer.Length != ReportLength )
+        {
+            throw new InvalidOperationException(
+                "Invalid buffer length for report.");
+        }
+
         var result = Open();
 
         if ( result )
         {
-            var overlapped = new NativeOverlapped();
-            
+            uint bytesWritten = 0;
+
             result = NativeMethods.WriteFile(Handle,
-                                             report.Data,
-                                             (uint)report.Data.Length,
-                                             out var bytesWritten,
-                                             ref overlapped) &&
-                     bytesWritten == report.Data.Length;
+                                             buffer,
+                                             ReportLength,
+                                             ref bytesWritten,
+                                             IntPtr.Zero) &&
+                     bytesWritten == ReportLength;
         }
 
         return result;

@@ -6,7 +6,6 @@ namespace Teensy.Net
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Threading;
 
 /// <summary>
 /// HID native code wrappers.
@@ -22,8 +21,9 @@ internal static class NativeMethods
     internal const short FILE_SHARE_WRITE =      0x2;
     internal const uint  GENERIC_READ =          0x80000000;
     internal const uint  GENERIC_WRITE =         0x40000000;
+    internal const uint  HIDP_STATUS_SUCCESS =   (0x0 << 28) | (0x11 << 16) | 0;
     internal const int   INVALID_HANDLE_VALUE =  -1;
-    internal const short OPEN_EXISTING =         3;
+    internal const uint  OPEN_EXISTING =         3;
 
     /**************************************************************************
                                   STRUCTURES
@@ -31,49 +31,41 @@ internal static class NativeMethods
     [StructLayout(LayoutKind.Sequential)]
     internal struct HIDD_ATTRIBUTES
     {
-        internal int    Size;
-        internal ushort VendorID;
-        internal ushort ProductID;
-        internal short  VersionNumber;
+        internal int           Size;
+        internal ushort        VendorID;
+        internal ushort        ProductID;
+        private readonly short VersionNumber;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct HIDP_CAPS
     {
-        internal short   Usage;
-        internal short   UsagePage;
-        internal short   InputReportByteLength;
-        internal short   OutputReportByteLength;
-        internal short   FeatureReportByteLength;
+        internal short           Usage;
+        private readonly short   UsagePage;
+        private readonly short   InputReportByteLength;
+        internal short           OutputReportByteLength;
+        private readonly short   FeatureReportByteLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 17)]
-        internal short[] Reserved;
-        internal short   NumberLinkCollectionNodes;
-        internal short   NumberInputButtonCaps;
-        internal short   NumberInputValueCaps;
-        internal short   NumberInputDataIndices;
-        internal short   NumberOutputButtonCaps;
-        internal short   NumberOutputValueCaps;
-        internal short   NumberOutputDataIndices;
-        internal short   NumberFeatureButtonCaps;
-        internal short   NumberFeatureValueCaps;
-        internal short   NumberFeatureDataIndices;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct SECURITY_ATTRIBUTES
-    {
-        public int    nLength;
-        public IntPtr lpSecurityDescriptor;
-        public bool   bInheritHandle;
+        private readonly short[] Reserved;
+        private readonly short   NumberLinkCollectionNodes;
+        private readonly short   NumberInputButtonCaps;
+        private readonly short   NumberInputValueCaps;
+        private readonly short   NumberInputDataIndices;
+        private readonly short   NumberOutputButtonCaps;
+        private readonly short   NumberOutputValueCaps;
+        private readonly short   NumberOutputDataIndices;
+        private readonly short   NumberFeatureButtonCaps;
+        private readonly short   NumberFeatureValueCaps;
+        private readonly short   NumberFeatureDataIndices;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SP_DEVICE_INTERFACE_DATA
     {
-        internal int   cbSize;
-        private Guid   InterfaceClassGuid;
-        private int    Flags;
-        private IntPtr Reserved;
+        internal int            Size;
+        private Guid            InterfaceClassGuid;
+        private readonly int    Flags;
+        private readonly IntPtr Reserved;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]
@@ -87,7 +79,7 @@ internal static class NativeMethods
     [StructLayout(LayoutKind.Sequential)]
     private struct SP_DEVINFO_DATA
     {
-        internal int    cbSize;
+        internal int    Size;
         internal Guid   ClassGuid;
         internal int    DevInst;
         internal IntPtr Reserved;
@@ -96,31 +88,36 @@ internal static class NativeMethods
     /**************************************************************************
                                 WINDOWS API
     **************************************************************************/
-    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true, CharSet = CharSet.Auto)]
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool CloseHandle(IntPtr handle);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    internal static extern IntPtr CreateFile(
-        string                  fileName,
-        uint                    desiredAccess,
-        int                     shareMode,
-        ref SECURITY_ATTRIBUTES securityAttributes,
-        int                     creationDisposition,
-        int                     flagsAndAttributes,
-        int                     templateFile);
+    [DllImport("kernel32.dll")]
+    internal static extern IntPtr CreateFile(string  fileName,
+                                             uint    desiredAccess,
+                                             uint    shareMode,
+                                             IntPtr  securityAttributes,
+                                             uint    creationDisposition,
+                                             uint    flagsAndAttributes,
+                                             IntPtr  overlapped);
 
     [DllImport("kernel32.dll")]
-    internal static extern bool WriteFile(
-        IntPtr                    file,
-        byte[]                    buffer,
-        uint                      numberOfBytesToWrite,
-        out uint                  numberOfBytesWritten,
-        [In] ref NativeOverlapped overlapped);
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool WriteFile(IntPtr    file,
+                                          byte[]    buffer,
+                                          uint      numberOfBytesToWrite,
+                                          ref uint  numberOfBytesWritten,
+                                          IntPtr    overlapped);
 
+    /**************************************************************************
+                                HID API
+    **************************************************************************/
     [DllImport("hid.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
 
     [DllImport("hid.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool HidD_GetAttributes(
         IntPtr              deviceObject,
         ref HIDD_ATTRIBUTES attributes);
@@ -129,11 +126,13 @@ internal static class NativeMethods
     private static extern void HidD_GetHidGuid(ref Guid hidGuid);
 
     [DllImport("hid.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool HidD_GetPreparsedData(
         IntPtr     deviceObject,
         ref IntPtr preparsedData);
 
     [DllImport("hid.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool HidD_GetSerialNumberString(
         IntPtr   hidDeviceObject,
         ref byte reportBuffer,
@@ -143,17 +142,22 @@ internal static class NativeMethods
     internal static extern int HidP_GetCaps(IntPtr        preparsedData,
                                             ref HIDP_CAPS capabilities);
 
+    /**************************************************************************
+                                SETUP API
+    **************************************************************************/
     [DllImport("setupapi.dll")]
     private static extern int SetupDiDestroyDeviceInfoList(
         IntPtr deviceInfoSet);
 
     [DllImport("setupapi.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetupDiEnumDeviceInfo(
         IntPtr              deviceInfoSet,
         int                 memberIndex,
         ref SP_DEVINFO_DATA deviceInfoData);
 
     [DllImport("setupapi.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetupDiEnumDeviceInterfaces(
         IntPtr                       deviceInfoSet,
         ref SP_DEVINFO_DATA          deviceInfoData,
@@ -167,16 +171,8 @@ internal static class NativeMethods
                                                      int      hwndParent,
                                                      int      flags);
 
-    [DllImport("setupapi.dll", CharSet = CharSet.Auto, EntryPoint = "SetupDiGetDeviceInterfaceDetail")]
-    private static  extern bool SetupDiGetDeviceInterfaceDetailBuffer(
-        IntPtr                       deviceInfoSet,
-        ref SP_DEVICE_INTERFACE_DATA deviceInterfaceData,
-        IntPtr                       deviceInterfaceDetailData,
-        int                          deviceInterfaceDetailDataSize,
-        ref int                      requiredSize,
-        IntPtr                       deviceInfoData);
-
     [DllImport("setupapi.dll", CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetupDiGetDeviceInterfaceDetail(
         IntPtr                              deviceInfoSet,
         ref SP_DEVICE_INTERFACE_DATA        deviceInterfaceData,
@@ -184,6 +180,16 @@ internal static class NativeMethods
         int                                 deviceInterfaceDetailDataSize,
         ref int                             requiredSize,
         IntPtr                              deviceInfoData);
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Auto, EntryPoint = "SetupDiGetDeviceInterfaceDetail")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern void SetupDiGetDeviceInterfaceDetailBuffer(
+        IntPtr                       deviceInfoSet,
+        ref SP_DEVICE_INTERFACE_DATA deviceInterfaceData,
+        IntPtr                       deviceInterfaceDetailData,
+        int                          deviceInterfaceDetailDataSize,
+        ref int                      requiredSize,
+        IntPtr                       deviceInfoData);
 
     /**************************************************************************
                                   CLASS
@@ -204,7 +210,7 @@ internal static class NativeMethods
     {
         var result = new SP_DEVINFO_DATA();
 
-        result.cbSize =    Marshal.SizeOf(result);
+        result.Size =      Marshal.SizeOf(result);
         result.DevInst =   0;
         result.ClassGuid = Guid.Empty;
         result.Reserved =  IntPtr.Zero;
@@ -244,7 +250,7 @@ internal static class NativeMethods
                 var deviceInterfaceData =  new SP_DEVICE_INTERFACE_DATA();
                 var deviceInterfaceIndex = 0;
 
-                deviceInterfaceData.cbSize =
+                deviceInterfaceData.Size =
                     Marshal.SizeOf(deviceInterfaceData);
 
                 while ( keepGoing &&
@@ -256,26 +262,27 @@ internal static class NativeMethods
                 {
                     ++deviceInterfaceIndex;
 
-                    var teensy = new TeensyBootloaderDevice(
-                        GetDevicePath(deviceInfoSet, deviceInterfaceData));
+                    var path = GetDevicePath(deviceInfoSet,
+                                             deviceInterfaceData);
 
-                    // If not a known Teensy type, skip it.
-                    if ( teensy.TeensyType != TeensyTypes.Unknown )
+                    if ( path != null )
                     {
-                        if ( serialNumber == 0 ||
-                             teensy.SerialNumber == serialNumber )
-                        {
-                            result.Add(teensy);
+                        var teensy = new TeensyBootloaderDevice(path);
 
-                            if ( serialNumber != 0 )
+                        // If not a known Teensy type, skip it.
+                        if ( teensy.TeensyType != TeensyTypes.Unknown )
+                        {
+                            if ( serialNumber == 0 ||
+                                 teensy.SerialNumber == serialNumber )
                             {
-                                keepGoing = false;
+                                result.Add(teensy);
+                                keepGoing = serialNumber != 0;
                             }
                         }
-                    }
-                    else
-                    {
-                        teensy.Dispose();
+                        else
+                        {
+                            teensy.Dispose();
+                        }
                     }
                 }
             }
@@ -290,7 +297,8 @@ internal static class NativeMethods
         IntPtr                   deviceInfoSet,
         SP_DEVICE_INTERFACE_DATA deviceInterfaceData)
     {
-        var bufferSize = 0;
+        string result =     null;
+        var    bufferSize = 0;
 
         var interfaceDetail = new SP_DEVICE_INTERFACE_DETAIL_DATA
         {
@@ -304,13 +312,22 @@ internal static class NativeMethods
                                               ref bufferSize,
                                               IntPtr.Zero);
 
-        return SetupDiGetDeviceInterfaceDetail(
-            deviceInfoSet,
-            ref deviceInterfaceData,
-            ref interfaceDetail,
-            bufferSize,
-            ref bufferSize,
-            IntPtr.Zero) ?  interfaceDetail.DevicePath : null;
+        if ( bufferSize > 0 )
+        {
+            if ( SetupDiGetDeviceInterfaceDetail(deviceInfoSet,
+                                                 ref deviceInterfaceData,
+                                                 ref interfaceDetail,
+                                                 bufferSize,
+                                                 ref bufferSize,
+                                                 IntPtr.Zero) )
+            {
+                result = string.IsNullOrEmpty(interfaceDetail.DevicePath)
+                         ? null
+                         : interfaceDetail.DevicePath;
+            }
+        }
+
+        return result;
     }
 }
 
