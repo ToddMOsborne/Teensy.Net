@@ -350,7 +350,7 @@ public class Teensy
     {
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
-        var result = device.Write(new HidRebootReport(device));
+        var result = new HidRebootReport(device).Reboot();
 
         if ( result )
         {
@@ -446,7 +446,9 @@ public class Teensy
                     {
                         if ( device != null )
                         {
-                            result = device.Upload(this, image);
+                            result = new HidUploadReport(device,
+                                                         this,
+                                                         image).Upload();
 
                             // Always reboot now.
                             var rebooted = Reboot(device);

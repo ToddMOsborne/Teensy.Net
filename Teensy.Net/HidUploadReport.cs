@@ -2,6 +2,7 @@
 {
 
 using System;
+using System.Threading;
 
 /// <summary>
 /// This is a HID report used for uploading firmware.
@@ -26,19 +27,48 @@ internal class HidUploadReport : HidReport
     private HexImage Image { get; }
 
     /// <summary>
-    /// Set the report data for uploading part of an image. On input,
-    /// imageOffset specifies the starting point in the image. On exit, it
-    /// will contain the offset for the next iteration. This method returns
-    /// true to indicate there is indeed another iteration needed, false when
-    /// complete.
+    /// The Teensy object.
     /// </summary>
-    public bool InitializeImageBlock(ref uint imageOffset,
-                                     out bool shouldUpload)
-    {
-        shouldUpload = true;
+    private Teensy Teensy { get; }
 
+    /// <summary>
+    /// Upload an image to the Teensy.
+    /// </summary>
+    public UploadResults Upload()
+    {
+        var  result = UploadResults.Success;
+
+        // Bail?
+        if ( Image.IsValid )
+        {
+            uint imageOffset = 0;
+
+            while ( WriteBlock(ref imageOffset, ref result) ) {}
+
+            // One final callback for 100%?
+            Teensy.ProvideFeedback((uint)Image.Data.Length,
+                                   (uint)Image.Data.Length);
+        }
+        else
+        {
+            result = UploadResults.ErrorInvalidHexImage;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Write a single report block. On input, imageOffset specifies the
+    /// starting point in the image. On exit, it will contain the offset for
+    /// the next iteration. This method returns true to indicate there is
+    /// indeed another iteration needed, false when complete.
+    /// </summary>
+    private bool WriteBlock(ref uint          imageOffset,
+                            ref UploadResults uploadResult)
+    {
         // Determine if the image at the specified block is empty.
-        var empty = imageOffset != 0;
+        var firstBlock = imageOffset == 0;
+        var empty =      !firstBlock;
 
         if ( empty )
         {
@@ -62,24 +92,27 @@ internal class HidUploadReport : HidReport
         // Empty?
         if ( empty )
         {
-            imageOffset += Device.ReportLength;
-            shouldUpload = false;
+            imageOffset += (uint)Device.ReportLength - 1;
         }
         else
         {
+            Reset();
+
+            if ( firstBlock )
+            {
+                Teensy.ProvideFeedback(
+                    $"Erasing {Constants.TeensyWord} Flash Memory");
+            }
+
             // Copy address bytes to report.
             var address = BitConverter.GetBytes((int)imageOffset);
-
-            // There are (mostly) common.
-            SetByte(0, address[0]);
-            SetByte(1, address[1]);
 
             switch ( Teensy.TeensyType )
             {
                 case TeensyTypes.Teensy2PlusPlus:
                 {
-                    SetByte(0, address[1]);
-                    SetByte(1, address[2]);
+                    AddData(address[1]);
+                    AddData(address[2]);
                     break;
                 }
 
@@ -91,37 +124,47 @@ internal class HidUploadReport : HidReport
                 case TeensyTypes.Teensy36:
                 case TeensyTypes.Teensy40:
                 {
-                    SetByte(2, address[2]);
+                    AddData(address[0]);
+                    AddData(address[1]);
+                    AddData(address[2]);
                     break;
                 }
             }
             
-            // Copy data to report.
-            var reportOffset = Teensy.DataOffset + 1;
+            // Copy data to report, starting at Teensy.DataOffset.
+            SetDataStart(Teensy);
             
-            while ( reportOffset < Length )
+            while ( imageOffset < Image.Data.Length )
             {
-                if ( imageOffset < Image.Data.Length)
+                if ( !AddData(Image.Data[imageOffset]) )
                 {
-                    SetByte(reportOffset, Image.Data[imageOffset]);
-                    ++imageOffset;
-                }
-                else
-                {
-                    ClearByte(reportOffset);
+                    break;
                 }
 
-                ++reportOffset;
+                ++imageOffset;
+            }
+
+            if ( Write() )
+            {
+                Teensy.ProvideFeedback(imageOffset,
+                                       (uint)Image.Data.Length);
+
+                // The first write erases the chip and needs a little
+                // longer to complete. Allow it 5 seconds. After that, use
+                // 1/2 second. This is taken from the code for teensy
+                // loader at:
+                // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
+                Thread.Sleep(firstBlock ? 5000 : 500);
+            }
+            else
+            {
+                uploadResult = UploadResults.ErrorUpload;
             }
         }
 
-        return imageOffset < Image.Data.Length;
+        return uploadResult == UploadResults.Success &&
+               imageOffset < Image.Data.Length;
     }
-
-    /// <summary>
-    /// The Teensy object.
-    /// </summary>
-    private Teensy Teensy { get; }
 }
 
 }

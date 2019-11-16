@@ -4,7 +4,6 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 
 /// <summary>
 /// A single Teensy that is running the bootloader. In this state, it is not
@@ -148,9 +147,10 @@ internal class HidDevice : IDisposable
     }
 
     /// <summary>
-    /// Handle.
+    /// The handle. The lifetime is managed by this object. Do not close it
+    /// outside of the Close() method.
     /// </summary>
-    private IntPtr Handle { get; set; } = IntPtr.Zero;
+    public IntPtr Handle { get; private set; } = IntPtr.Zero;
 
     /// <summary>
     /// Is this device open?
@@ -166,7 +166,7 @@ internal class HidDevice : IDisposable
     /// <summary>
     /// Open the device, as needed.
     /// </summary>
-    private bool Open(bool readWrite = true)
+    public bool Open(bool readWrite = true)
     {
         // Open, but without read/write access?
         if ( IsOpen && readWrite && !IsOpenReadWrite )
@@ -233,136 +233,6 @@ internal class HidDevice : IDisposable
     /// Get the type of Teensy device.
     /// </summary>
     public TeensyTypes TeensyType { get; } = TeensyTypes.Unknown;
-
-    /// <summary>
-    /// Upload an image to the Teensy.
-    /// </summary>
-    public UploadResults Upload(Teensy   teensy,
-                                HexImage image)
-    {
-        // Bail?
-        if ( !image.IsValid )
-        {
-            return UploadResults.ErrorInvalidHexImage;
-        }
-
-        var result = UploadResults.Success;
-
-        var report =       new HidUploadReport(this, teensy, image);
-        uint imageOffset = 0;
-        var  keepGoing =   true;
-
-        while ( keepGoing )
-        {
-            var firstBlock = imageOffset == 0;
-
-            if ( firstBlock )
-            {
-                teensy.ProvideFeedback(
-                    $"Erasing {Constants.TeensyWord} Flash Memory");
-            }
-
-            keepGoing = report.InitializeImageBlock(ref     imageOffset,
-                                                    out var shouldUpload);
-            if ( shouldUpload )
-            {
-                if ( Write(report) )
-                {
-                    // The first write erases the chip and needs a little
-                    // longer to complete. Allow it 5 seconds. After that, use
-                    // 1/2 second. This is taken from the code for teensy
-                    // loader at:
-                    // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
-                    Thread.Sleep(firstBlock ? 5000 : 500);
-                }
-                else
-                {
-                    result =    UploadResults.ErrorUpload;
-                    keepGoing = false;
-                }
-            }
-
-            if ( keepGoing )
-            {
-                teensy.ProvideFeedback(imageOffset,
-                                       (uint)image.Data.Length);
-            }
-        }
-
-        // One final callback for 100%?
-        teensy.ProvideFeedback((uint)image.Data.Length,
-                               (uint)image.Data.Length);
-
-        return result;
-    }
-
-    /// <summary>
-    /// Write report data to the bootloader.
-    /// </summary>
-    public bool Write(HidReport report)
-    {
-        var bytes = report.GetBytes();
-
-        // If this fails, try again after a short delay.
-        var result = Write(bytes, report is HidUploadReport);
-
-        if ( !result )
-        {
-            Thread.Sleep(100);
-            result = Write(bytes, report is HidUploadReport);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Write report data to the bootloader.
-    /// </summary>
-    private bool Write(byte[] buffer, bool test)
-    {
-        var result = Open();
-
-        if ( result )
-        {
-            uint bytesWritten = 0;
-
-            if ( test )
-            {
-                IntPtr h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet",
-                                                       0x0004,
-                                                       0,
-                                                       IntPtr.Zero,
-                                                       4,
-                                                       0,
-                                                       IntPtr.Zero);
-
-                result = HidNativeMethods.WriteFile(h, buffer, (uint)buffer.Length, ref bytesWritten, IntPtr.Zero);
-                HidNativeMethods.CloseHandle(h);
-
-                h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet.writes",
-                                                       0x0004,
-                                                       0,
-                                                       IntPtr.Zero,
-                                                       4,
-                                                       0,
-                                                       IntPtr.Zero);
-
-                HidNativeMethods.WriteFile(h, Encoding.UTF8.GetBytes("X"), 1, ref bytesWritten, IntPtr.Zero);
-                HidNativeMethods.CloseHandle(h);
-            }
-            else
-            {
-                result = HidNativeMethods.WriteFile(Handle,
-                                                    buffer,
-                                                    (uint)buffer.Length,
-                                                    ref bytesWritten,
-                                                    IntPtr.Zero) &&
-                         bytesWritten == ReportLength;
-            }
-        }
-
-        return result;
-    }
 }
 
 }

@@ -2,7 +2,8 @@
 {
 
 /// <summary>
-/// This is a HID report used for rebooting devices.
+/// This is a HID report used for rebooting devices. Simply creating one of
+/// these objects 
 /// </summary>
 internal class HidRebootReport : HidReport
 {
@@ -12,10 +13,13 @@ internal class HidRebootReport : HidReport
     public HidRebootReport(HidDevice device) : base(device)
     {
         // https://www.pjrc.com/teensy/halfkay_protocol.html
-        SetByte(0, 0xFF);
-        SetByte(1, 0xFF);
-        SetByte(2, 0xFF);
+        Fill(3);
     }
+
+    /// <summary>
+    /// Reboot now.
+    /// </summary>
+    public bool Reboot() => Write();
 }
 
 }
