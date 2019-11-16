@@ -36,7 +36,7 @@ internal class HidUploadReport : HidReport
     /// </summary>
     public UploadResults Upload()
     {
-        var  result = UploadResults.Success;
+        var result = UploadResults.Success;
 
         // Bail?
         if ( Image.IsValid )
@@ -66,7 +66,8 @@ internal class HidUploadReport : HidReport
     private bool WriteBlock(ref uint          imageOffset,
                             ref UploadResults uploadResult)
     {
-        // Determine if the image at the specified block is empty.
+        // Determine if the image at the specified block is empty. This never
+        // applies to the first block.
         var firstBlock = imageOffset == 0;
         var empty =      !firstBlock;
 
@@ -90,11 +91,7 @@ internal class HidUploadReport : HidReport
         }
 
         // Empty?
-        if ( empty )
-        {
-            imageOffset += (uint)Device.ReportLength - 1;
-        }
-        else
+        if ( !empty )
         {
             Reset();
 
@@ -162,7 +159,8 @@ internal class HidUploadReport : HidReport
             }
         }
 
-        return uploadResult == UploadResults.Success &&
+        return !empty &&
+               uploadResult == UploadResults.Success &&
                imageOffset < Image.Data.Length;
     }
 }

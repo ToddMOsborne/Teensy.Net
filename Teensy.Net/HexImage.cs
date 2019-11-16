@@ -113,7 +113,7 @@ public class HexImage
                 // Assume failure now.
                 result = false;
                 
-                const int start =  0x400;
+                const int start = 0x400;
 
                 if ( Data.Length >= start )
                 {
