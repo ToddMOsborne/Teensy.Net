@@ -8,31 +8,42 @@
 /// </summary>
 internal class HidReport
 {
+    private readonly byte[] _bytes;
+
     /// <summary>
     /// Protected constructor must specify the data length.
     /// </summary>
-    protected HidReport(uint dataLength)
+    protected HidReport(HidDevice device)
     {
-        Data = new byte[dataLength];
-        Initialize();
+        Device = device;
+        _bytes = new byte[device.ReportLength];
     }
 
     /// <summary>
-    /// Get the data.
+    /// Set the byte at the specified index to 0.
     /// </summary>
-    public byte[] Data { get; }
+    protected void ClearByte(uint index) => SetByte(index, 0);
 
     /// <summary>
-    /// Initialize a HID report by setting all Data to 0, or specified
-    /// character.
+    /// Get the device this report was created for.
     /// </summary>
-    public void Initialize(byte b = 0)
-    {
-        for ( var i = 0; i < Data.Length; i++ )
-        {
-            Data[i] = b;
-        }
-    }
+    protected HidDevice Device { get; }
+
+    /// <summary>
+    /// Get the raw bytes.
+    /// </summary>
+    public byte[] GetBytes() => _bytes;
+
+    /// <summary>
+    /// Get the length of the data block.
+    /// </summary>
+    public uint Length => (uint)_bytes.Length;
+
+    /// <summary>
+    /// Set the byte at the specified index.
+    /// </summary>
+    protected void SetByte(uint index,
+                           byte value) => _bytes[index] = value;
 }
 
 }

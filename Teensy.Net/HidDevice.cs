@@ -36,7 +36,7 @@ internal class HidDevice : IDisposable
                     var pointer =      default(IntPtr);
 
                     if ( HidNativeMethods.HidD_GetPreparsedData(Handle,
-                                                             ref pointer) )
+                                                                ref pointer) )
                     {
                         if ( HidNativeMethods.HidP_GetCaps(
                             pointer,
@@ -45,63 +45,68 @@ internal class HidDevice : IDisposable
                         {
                             HidNativeMethods.HidD_FreePreparsedData(pointer);
 
-                            ReportLength =
-                                (ushort)capabilities.OutputReportByteLength;
-
-                            switch ( capabilities.Usage )
+                            if ( capabilities.OutputReportByteLength > 0 )
                             {
-                                case 0x1B:
-                                {
-                                    TeensyType = TeensyTypes.Teensy2;
-                                    break;
-                                }
+                                ReportLength = (ushort)
+                                    capabilities.OutputReportByteLength;
 
-                                case 0x1C:
+                                switch ( capabilities.Usage )
                                 {
-                                    TeensyType = TeensyTypes.Teensy2PlusPlus;
-                                    break;
-                                }
+                                    case 0x1B:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy2;
+                                        break;
+                                    }
 
-                                case 0x1D:
-                                {
-                                    TeensyType = TeensyTypes.Teensy30;
-                                    break;
-                                }
+                                    case 0x1C:
+                                    {
+                                        TeensyType =
+                                            TeensyTypes.Teensy2PlusPlus;
 
-                                case 0x1E:
-                                {
-                                    TeensyType = TeensyTypes.Teensy31;
-                                    break;
-                                }
+                                        break;
+                                    }
 
-                                case 0x20:
-                                {
-                                    TeensyType = TeensyTypes.TeensyLc;
-                                    break;
-                                }
+                                    case 0x1D:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy30;
+                                        break;
+                                    }
 
-                                case 0x21:
-                                {
-                                    TeensyType = TeensyTypes.Teensy32;
-                                    break;
-                                }
-                                
-                                case 0x1F:
-                                {
-                                    TeensyType = TeensyTypes.Teensy35;
-                                    break;
-                                }
+                                    case 0x1E:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy31;
+                                        break;
+                                    }
 
-                                case 0x22:
-                                {
-                                    TeensyType = TeensyTypes.Teensy36;
-                                    break;
-                                }
+                                    case 0x20:
+                                    {
+                                        TeensyType = TeensyTypes.TeensyLc;
+                                        break;
+                                    }
 
-                                case 0x24:
-                                {
-                                    TeensyType = TeensyTypes.Teensy40;
-                                    break;
+                                    case 0x21:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy32;
+                                        break;
+                                    }
+                                    
+                                    case 0x1F:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy35;
+                                        break;
+                                    }
+
+                                    case 0x22:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy36;
+                                        break;
+                                    }
+
+                                    case 0x24:
+                                    {
+                                        TeensyType = TeensyTypes.Teensy40;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -197,7 +202,7 @@ internal class HidDevice : IDisposable
     /// <summary>
     /// The required output report length.
     /// </summary>
-    private ushort ReportLength { get; }
+    internal ushort ReportLength { get; }
 
     /// <summary>
     /// Get the serial number of this device.
@@ -242,44 +247,25 @@ internal class HidDevice : IDisposable
         }
 
         var result = UploadResults.Success;
-        var data =   image.Data;
-        var length = (uint)data.Length;
 
-        bool IsEmptyBlock(uint offset)
+        var report =       new HidUploadReport(this, teensy, image);
+        uint imageOffset = 0;
+        var  keepGoing =   true;
+
+        while ( keepGoing )
         {
-            var empty = true;
-            var end =   offset + teensy.BlockSize;
+            var firstBlock = imageOffset == 0;
 
-            while ( offset < end )
+            if ( firstBlock )
             {
-                if ( data[offset] != 0xFF )
-                {
-                    empty = false;
-                    break;
-                }
-
-                ++offset;
+                teensy.ProvideFeedback(
+                    $"Erasing {Constants.TeensyWord} Flash Memory");
             }
 
-            return empty;
-        }
-
-        var report = new HidUploadReport(teensy, image);
-
-        for ( uint offset = 0; offset < length; offset += teensy.BlockSize )
-        {
-            // If the block is empty, skip it. This does not apply to the first
-            // block though.
-            if ( offset == 0 || !IsEmptyBlock(offset) )
+            keepGoing = report.InitializeImageBlock(ref     imageOffset,
+                                                    out var shouldUpload);
+            if ( shouldUpload )
             {
-                if ( offset == 0 )
-                {
-                    teensy.ProvideFeedback(
-                        $"Erasing {Constants.TeensyWord} Flash Memory");
-                }
-
-                report.InitializeImageBlock(offset);
-
                 if ( Write(report) )
                 {
                     // The first write erases the chip and needs a little
@@ -287,20 +273,25 @@ internal class HidDevice : IDisposable
                     // 1/2 second. This is taken from the code for teensy
                     // loader at:
                     // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
-                    Thread.Sleep(offset == 0 ? 5000 : 500);
+                    Thread.Sleep(firstBlock ? 5000 : 500);
                 }
                 else
                 {
-                    result = UploadResults.ErrorUpload;
-                    break;
+                    result =    UploadResults.ErrorUpload;
+                    keepGoing = false;
                 }
             }
 
-            teensy.ProvideFeedback(offset, length);
+            if ( keepGoing )
+            {
+                teensy.ProvideFeedback(imageOffset,
+                                       (uint)image.Data.Length);
+            }
         }
 
         // One final callback for 100%?
-        teensy.ProvideFeedback(length, length);
+        teensy.ProvideFeedback((uint)image.Data.Length,
+                               (uint)image.Data.Length);
 
         return result;
     }
@@ -310,40 +301,15 @@ internal class HidDevice : IDisposable
     /// </summary>
     public bool Write(HidReport report)
     {
-        // Assume success.
-        var result = true;
-        var buffer = new byte[ReportLength];
+        var bytes = report.GetBytes();
 
-        // We have the chunk the report data into segments that fit within
-        // ReportLength.
-        var reportOffset =     0;
-        var reportDataLength = report.Data.Length;
+        // If this fails, try again after a short delay.
+        var result = Write(bytes, report is HidUploadReport);
 
-        while ( result && reportOffset < reportDataLength )
+        if ( !result )
         {
-            // Completely populate our buffer. If there is not enough data from
-            // the report, set buffer elements to 0.
-            // Report ID is always 0. This is the first byte in the buffer.
-            buffer[0] =        0;
-            var bufferOffset = 1;
-
-            while ( bufferOffset < buffer.Length )
-            {
-                buffer[bufferOffset] = reportOffset < reportDataLength
-                                       ? report.Data[reportOffset]
-                                       : (byte)0;
-                ++bufferOffset;
-                ++reportOffset;
-            }
-
-            // If this fails, try again after a short delay.
-            result = Write(buffer);
-
-            if ( !result )
-            {
-                Thread.Sleep(100);
-                result = Write(buffer);
-            }
+            Thread.Sleep(100);
+            result = Write(bytes, report is HidUploadReport);
         }
 
         return result;
@@ -352,26 +318,47 @@ internal class HidDevice : IDisposable
     /// <summary>
     /// Write report data to the bootloader.
     /// </summary>
-    private bool Write(byte[] buffer)
+    private bool Write(byte[] buffer, bool test)
     {
-        if ( buffer.Length != ReportLength )
-        {
-            throw new InvalidOperationException(
-                "Invalid buffer length for report.");
-        }
-
         var result = Open();
 
         if ( result )
         {
             uint bytesWritten = 0;
 
-            result = HidNativeMethods.WriteFile(Handle,
-                                                buffer,
-                                                ReportLength,
-                                                ref bytesWritten,
-                                                IntPtr.Zero) &&
-                     bytesWritten == ReportLength;
+            if ( test )
+            {
+                IntPtr h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet",
+                                                       0x0004,
+                                                       0,
+                                                       IntPtr.Zero,
+                                                       4,
+                                                       0,
+                                                       IntPtr.Zero);
+
+                result = HidNativeMethods.WriteFile(h, buffer, (uint)buffer.Length, ref bytesWritten, IntPtr.Zero);
+                HidNativeMethods.CloseHandle(h);
+
+                h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet.writes",
+                                                       0x0004,
+                                                       0,
+                                                       IntPtr.Zero,
+                                                       4,
+                                                       0,
+                                                       IntPtr.Zero);
+
+                HidNativeMethods.WriteFile(h, Encoding.UTF8.GetBytes("X"), 1, ref bytesWritten, IntPtr.Zero);
+                HidNativeMethods.CloseHandle(h);
+            }
+            else
+            {
+                result = HidNativeMethods.WriteFile(Handle,
+                                                    buffer,
+                                                    (uint)buffer.Length,
+                                                    ref bytesWritten,
+                                                    IntPtr.Zero) &&
+                         bytesWritten == ReportLength;
+            }
         }
 
         return result;

@@ -52,8 +52,7 @@ public class Teensy
         UsbType =      usbType;
 
         // Defaults that may be changed later.
-        BlockSize =     1024;
-        DataOffset =    64;
+        DataOffset = 64;
 
         switch ( teensyType )
         {
@@ -95,7 +94,6 @@ public class Teensy
 
             case TeensyTypes.TeensyLc:
             {
-                BlockSize = 512;
                 FlashSize = 62 * 1024;
                 McuType =   "MK126Z64";
                 break;
@@ -103,7 +101,6 @@ public class Teensy
 
             case TeensyTypes.Teensy2PlusPlus:
             {
-                BlockSize =  256;
                 DataOffset = 2;
                 FlashSize =  12 * 1024;
                 McuType =    "AT90USB1286";
@@ -112,7 +109,6 @@ public class Teensy
 
             case TeensyTypes.Teensy2:
             {
-                BlockSize =  128;
                 DataOffset = 2;
                 FlashSize =  31 * 1024;
                 McuType =    "ATMEGA32U4";
@@ -120,11 +116,6 @@ public class Teensy
             }
         }
     }
-
-    /// <summary>
-    /// Get the upload block size.
-    /// </summary>
-    internal uint BlockSize { get; }
 
     /// <summary>
     /// Change the internal state. Returns true if something actually changed.
@@ -359,7 +350,7 @@ public class Teensy
     {
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
-        var result = device.Write(new HidRebootReport());
+        var result = device.Write(new HidRebootReport(device));
 
         if ( result )
         {

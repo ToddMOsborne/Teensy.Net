@@ -9,10 +9,12 @@ internal class HidRebootReport : HidReport
     /// <summary>
     /// Default constructor.
     /// </summary>
-    public HidRebootReport() : base(3)
+    public HidRebootReport(HidDevice device) : base(device)
     {
         // https://www.pjrc.com/teensy/halfkay_protocol.html
-        Initialize(0xFF);
+        SetByte(0, 0xFF);
+        SetByte(1, 0xFF);
+        SetByte(2, 0xFF);
     }
 }
 
