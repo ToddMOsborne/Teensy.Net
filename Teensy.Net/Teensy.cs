@@ -51,68 +51,68 @@ public class Teensy
         SerialNumber = serialNumber;
         UsbType =      usbType;
 
-        // Defaults that may be changed later.
-        DataOffset = 64;
-
         switch ( teensyType )
         {
-            case TeensyTypes.Teensy40:
+            case TeensyTypes.Teensy2:
             {
-                FlashSize = 2048 * 1024;
-                McuType =   "IMXRT1062";
-                break;
-            }
-
-            case TeensyTypes.Teensy36:
-            {
-                FlashSize = 1024 * 1024;
-                McuType =   "MK66FX1M0";
-                break;
-            }
-
-            case TeensyTypes.Teensy35:
-            {
-                FlashSize = 512 * 1024;
-                McuType =   "MK64FX512";
-                break;
-            }
-
-            case TeensyTypes.Teensy32:
-            case TeensyTypes.Teensy31:
-            {
-                FlashSize = 256 * 1024;
-                McuType =   "MK20DX256";
-                break;
-            }
-
-            case TeensyTypes.Teensy30:
-            {
-                FlashSize = 128 * 1024;
-                McuType =   "MK20DX128";
-                break;
-            }
-
-            case TeensyTypes.TeensyLc:
-            {
-                FlashSize = 62 * 1024;
-                McuType =   "MK126Z64";
+                FlashSize =  32256;
+                McuType =    "ATMEGA32U4";
                 break;
             }
 
             case TeensyTypes.Teensy2PlusPlus:
             {
-                DataOffset = 2;
-                FlashSize =  12 * 1024;
+                FlashSize =  130048;
                 McuType =    "AT90USB1286";
                 break;
             }
 
-            case TeensyTypes.Teensy2:
+            case TeensyTypes.TeensyLc:
             {
-                DataOffset = 2;
-                FlashSize =  31 * 1024;
-                McuType =    "ATMEGA32U4";
+                FlashSize = 63488;
+                McuType =   "MK126Z64";
                 break;
+            }
+
+            case TeensyTypes.Teensy30:
+            {
+                FlashSize = 131072;
+                McuType =   "MK20DX128";
+                break;
+            }
+
+            case TeensyTypes.Teensy31:
+            case TeensyTypes.Teensy32:
+            {
+                FlashSize = 262144;
+                McuType =   "MK20DX256";
+                break;
+            }
+
+            case TeensyTypes.Teensy35:
+            {
+                FlashSize = 524288;
+                McuType =   "MK64FX512";
+                break;
+            }
+
+            case TeensyTypes.Teensy36:
+            {
+                FlashSize = 1048576;
+                McuType =   "MK66FX1M0";
+                break;
+            }
+
+            case TeensyTypes.Teensy40:
+            {
+                FlashSize = 2031616;
+                McuType =   "IMXRT1062";
+                break;
+            }
+
+            default:
+            {
+                throw new InvalidOperationException("Unknown Teeny type.");
             }
         }
     }
@@ -172,11 +172,6 @@ public class Teensy
     /// This event is fired when the UsbType or PortName changes.
     /// </summary>
     public event Action<Teensy> ConnectionStateChanged;
-
-    /// <summary>
-    /// Get the upload data offset.
-    /// </summary>
-    internal uint DataOffset { get; }
 
     /// <summary>
     /// Get the TeensyFactory object that created this Teensy.

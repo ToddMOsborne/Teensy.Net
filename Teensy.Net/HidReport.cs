@@ -32,6 +32,8 @@ internal class HidReport
         {
             Data[Index] = b;
             ++Index;
+
+            IsDirty = true;
         }
 
         return result;
@@ -70,15 +72,20 @@ internal class HidReport
     private uint Index { get; set; }
 
     /// <summary>
-    /// Set the current Data index to be at the DataOffset of the Teensy.
+    /// Determine if there is buffered data that needs to be written.
     /// </summary>
-    protected bool SetDataStart(Teensy teensy)
+    private bool IsDirty { get; set; }
+
+    /// <summary>
+    /// Set the current Data index.
+    /// </summary>
+    protected bool SetDataStart(uint index)
     {
-        var result = teensy.DataOffset < Data.Length;
+        var result = index < Data.Length;
 
         if ( result )
         {
-            Index = teensy.DataOffset;
+            Index = index;
         }
 
         return result;
@@ -90,6 +97,12 @@ internal class HidReport
     /// </summary>
     protected bool Write()
     {
+        // If nothing to write, say everything is fine.
+        if ( !IsDirty )
+        {
+            return true;
+        }
+
         var data = new byte[Device.ReportLength];
         Data.CopyTo(data, 1);
 
@@ -109,7 +122,8 @@ internal class HidReport
                 Data[i] = 0;
             }
 
-            Index = 0;
+            Index =   0;
+            IsDirty = false;
         }
 
         return result;
@@ -139,6 +153,11 @@ internal class HidReport
                                                      ref bytesWritten,
                                                      IntPtr.Zero) &&
                          bytesWritten == Device.ReportLength;
+            }
+
+            if ( written )
+            {
+                Thread.Sleep(10);
             }
 
             return written;

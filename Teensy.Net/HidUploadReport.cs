@@ -20,7 +20,51 @@ internal class HidUploadReport : HidReport
     {
         Teensy = teensy;
         Image =  image;
+
+        switch ( teensy.TeensyType )
+        {
+            case TeensyTypes.Teensy2:
+            {
+                BlockSize = 128;
+                break;
+            }
+
+            case TeensyTypes.Teensy2PlusPlus:
+            {
+                BlockSize = 256;
+                break;
+            }
+
+            case TeensyTypes.TeensyLc:
+            {
+                BlockSize = 512;
+                break;
+            }
+
+            case TeensyTypes.Teensy30:
+            case TeensyTypes.Teensy31:
+            case TeensyTypes.Teensy32:
+            case TeensyTypes.Teensy35:
+            case TeensyTypes.Teensy36:
+            case TeensyTypes.Teensy40:
+            {
+                BlockSize = 1024;
+                break;
+            }
+
+            default:
+            {
+                throw new InvalidOperationException(
+                    "Cannot determine Teeny data block size.");
+            }
+        }
     }
+
+    /// <summary>
+    /// The size of each block we upload. This can be different from the HID
+    /// report size.
+    /// </summary>
+    private uint BlockSize { get; }
 
     /// <summary>
     /// The HexImage.
@@ -64,9 +108,113 @@ internal class HidUploadReport : HidReport
                 }
             #endif
 
-            uint imageOffset = 0;
+            // Write the report if currently this method is working.
+            bool WriteReport()
+            {
+                if ( result == UploadResults.Success )
+                {
+                    if ( !Write() )
+                    {
+                        result = UploadResults.ErrorUpload;
+                    }
+                }
 
-            while ( WriteBlock(ref imageOffset, ref result) ) {}
+                return result == UploadResults.Success;
+            }
+
+            // How much image do to write in each block.
+            var writeLength = BlockSize == 512 || BlockSize == 1024
+                              ? BlockSize + 64
+                              : BlockSize + 2;
+
+            // Determine the total length of data that will be written.
+            var totalLength = 0u;
+
+            Image.Chunk(writeLength, (bytes, imageOffset) =>
+            {
+                totalLength = imageOffset + writeLength;
+                return true;
+            });
+
+            Image.Chunk(writeLength, (bytes, imageOffset) =>
+            {
+                if ( imageOffset == 0 )
+                {
+                    Teensy.ProvideFeedback(
+                        $"Erasing {Constants.TeensyWord} Flash Memory");
+                }
+
+                // The data offset is how much free space to leave in the HID
+                // report data before writing of actual image data. The address
+                // is always first, but writing image data should occur at this
+                // offset.
+                var dataOffset = 2u;
+
+                // Add address (image offset).
+                if ( BlockSize <= 256 && Teensy.FlashSize < 0x10000 )
+                {
+                    AddData((byte)(imageOffset & 0xFF));
+                    AddData((byte)((imageOffset >> 8) & 0xFF));
+                }
+                else if ( BlockSize == 256 )
+                {
+                    AddData((byte)((imageOffset >> 8)  & 0xFF));
+                    AddData((byte)((imageOffset >> 16) & 0xFF));
+                }
+                else
+                {
+                    AddData((byte)(imageOffset & 0xFF));
+                    AddData((byte)((imageOffset >> 8)  & 0xFF));
+                    AddData((byte)((imageOffset >> 16) & 0xFF));
+
+                    dataOffset = 64;
+                }
+
+                // Copy data to report, starting at data offset.
+                SetDataStart(dataOffset);
+
+                foreach ( var b in bytes )
+                {
+                    // If report data is full, time to write it.
+                    if ( !AddData(b) )
+                    {
+                        if ( WriteReport() )
+                        {
+                            AddData(b);
+
+                            // The first write erases the chip and needs a
+                            // little longer to complete. Allow it 5 seconds.
+                            if ( imageOffset == 0 )
+                            {
+                                #if DEBUG
+                                    if ( TestOutputStream == null )
+                                    {
+                                        Thread.Sleep(5000);
+                                    }
+                                #else
+                                    Thread.Sleep(5000);
+                                #endif
+                            }
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if ( result == UploadResults.Success )
+                {
+                    Teensy.ProvideFeedback(
+                       Math.Min(imageOffset + writeLength, totalLength),
+                       totalLength);
+                }
+
+                return result == UploadResults.Success;
+            });
+
+            // There could still be data buffered that needs to be written.
+            WriteReport();
 
             #if DEBUG
                 if ( TestOutputStream != null )
@@ -78,8 +226,7 @@ internal class HidUploadReport : HidReport
             #endif
 
             // One final callback for 100%?
-            Teensy.ProvideFeedback((uint)Image.Data.Length,
-                                   (uint)Image.Data.Length);
+            Teensy.ProvideFeedback(totalLength, totalLength);
         }
         else
         {
@@ -87,102 +234,6 @@ internal class HidUploadReport : HidReport
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Write a single report block. On input, imageOffset specifies the
-    /// starting point in the image. On exit, it will contain the offset for
-    /// the next iteration. This method returns true to indicate there is
-    /// indeed another iteration needed, false when complete.
-    /// </summary>
-    private bool WriteBlock(ref uint          imageOffset,
-                            ref UploadResults uploadResult)
-    {
-        // Determine if the image at the specified block is empty. This never
-        // applies to the first block.
-        var firstBlock =  imageOffset == 0;
-        var empty =       !firstBlock;
-        var imageData =   Image.Data;
-        var imageLength = (uint)imageData.Length;
-
-        if ( empty )
-        {
-            for ( var i = imageOffset; i < imageLength; i++ )
-            {
-                if ( imageData[i] != 0xFF )
-                {
-                    empty = false;
-                    break;
-                }
-
-            }
-        }
-
-        // Empty?
-        if ( !empty )
-        {
-            if ( firstBlock )
-            {
-                Teensy.ProvideFeedback(
-                    $"Erasing {Constants.TeensyWord} Flash Memory");
-            }
-
-            // Copy address bytes to report.
-            var address = BitConverter.GetBytes(imageOffset);
-
-            switch ( Teensy.TeensyType )
-            {
-                case TeensyTypes.Teensy2PlusPlus:
-                {
-                    AddData(address[1]);
-                    AddData(address[2]);
-                    break;
-                }
-
-                case TeensyTypes.TeensyLc:
-                case TeensyTypes.Teensy30:
-                case TeensyTypes.Teensy31:
-                case TeensyTypes.Teensy32:
-                case TeensyTypes.Teensy35:
-                case TeensyTypes.Teensy36:
-                case TeensyTypes.Teensy40:
-                {
-                    AddData(address[0]);
-                    AddData(address[1]);
-                    AddData(address[2]);
-                    break;
-                }
-            }
-            
-            // Copy data to report, starting at Teensy.DataOffset.
-            SetDataStart(Teensy);
-            
-            while ( imageOffset < imageLength &&
-                    AddData(imageData[imageOffset]) )
-            {
-                ++imageOffset;
-            }
-
-            if ( Write() )
-            {
-                Teensy.ProvideFeedback(imageOffset - 1, imageLength);
-
-                // The first write erases the chip and needs a little
-                // longer to complete. Allow it 5 seconds. After that, use
-                // 1/2 second. This is taken from the code for teensy
-                // loader at:
-                // https://github.com/PaulStoffregen/teensy_loader_cli/blob/master/teensy_loader_cli.c
-                Thread.Sleep(firstBlock ? 5000 : 500);
-            }
-            else
-            {
-                uploadResult = UploadResults.ErrorUpload;
-            }
-        }
-
-        return !empty                                &&
-               uploadResult == UploadResults.Success &&
-               imageOffset < imageLength;
     }
 }
 

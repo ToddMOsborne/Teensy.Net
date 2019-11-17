@@ -83,9 +83,63 @@ public class HexImage
     }
 
     /// <summary>
+    /// Call a callback once for each chunk of data in the image. The callback
+    /// will receive the data as well as the offset into the data. Return true
+    /// from the callback to keeping chunking.
+    /// </summary>
+    public void Chunk(uint                     chunkSize,
+                      Func<byte[], uint, bool> callback)
+    {
+        var chunk =       new byte[chunkSize];
+        var imageData =   Data;
+        var imageLength = imageData.Length;
+
+        for ( var imageOffset = 0u;
+              imageOffset < imageLength;
+              imageOffset += chunkSize )
+        {
+            var keepGoing = true;
+
+            // Clear chunk.
+            for ( var i = 0; i < chunkSize; i++ )
+            {
+                chunk[i] = 0;
+            }
+
+            // Is the image empty?
+            for ( var i = 0;
+                  i < chunkSize && imageOffset + i < imageLength;
+                  i++ )
+            {
+                keepGoing = false;
+
+                // Not empty? Always call for first chunk.
+                if ( imageOffset == 0 || imageData[imageOffset + i] != 0xFF )
+                {
+                    // Copy data.
+                    for ( var j = 0;
+                          j < chunkSize && imageOffset + j < imageLength;
+                          j++ )
+                    {
+                        chunk[j] = imageData[imageOffset + j];
+                    }
+
+                    keepGoing = callback(chunk, imageOffset);
+                    break;
+                }
+            }
+
+            if ( !keepGoing )
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
     /// Get the raw (binary) data associated with this image.
     /// </summary>
-    public byte[] Data { get; }
+    private byte[] Data { get; }
 
     /// <summary>
     /// Determine if the image is valid and has been processed normally.
