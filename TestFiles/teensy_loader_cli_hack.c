@@ -219,6 +219,7 @@ int main(int argc, char **argv)
     // Hack for output file.
     if ( outputFile )
     {
+        fflush(outputFile);
         fclose(outputFile);
         outputFile = NULL;
     }
@@ -477,6 +478,7 @@ int write_usb_device(HANDLE h, void *buf, int len, int timeout)
     if ( outputFile )
     {
         fwrite(tmpbuf, 1, len + 1, outputFile);
+        fflush(outputFile);
     }
 
 	if (!GetOverlappedResult(h, &ov, &n, FALSE)) return 0;

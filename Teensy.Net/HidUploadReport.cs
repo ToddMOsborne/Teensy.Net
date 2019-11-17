@@ -127,6 +127,8 @@ internal class HidUploadReport : HidReport
                               ? BlockSize + 64
                               : BlockSize + 2;
 
+            writeLength = BlockSize;
+
             // Determine the total length of data that will be written.
             var totalLength = 0u;
 
