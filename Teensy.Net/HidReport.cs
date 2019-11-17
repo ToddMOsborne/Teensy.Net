@@ -2,7 +2,6 @@
 {
 
 using System;
-using System.Text;
 using System.Threading;
 
 /// <summary>
@@ -106,12 +105,12 @@ internal class HidReport
     protected bool Write()
     {
         // If this fails, try again after a short delay.
-        var result = WriteInternal(this is HidUploadReport);
+        var result = WriteInternal();
 
         if ( !result )
         {
             Thread.Sleep(100);
-            result = WriteInternal(this is HidUploadReport);
+            result = WriteInternal();
         }
 
         return result;
@@ -120,55 +119,58 @@ internal class HidReport
     /// <summary>
     /// Write report data to the bootloader.
     /// </summary>
-    private bool WriteInternal(bool test)
+    private bool WriteInternal()
     {
         if ( Data.Length != Device.ReportLength )
         {
             throw new Exception("Invalid HID report length.");
         }
 
-        var result = Device.Open();
-
-        if ( result )
+        bool WriteDevice()
         {
-            uint bytesWritten = 0;
+            var written = Device.Open();
 
-            if ( test )
+            if ( written )
             {
-                IntPtr h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet",
-                                                       0x0004,
-                                                       0,
-                                                       IntPtr.Zero,
-                                                       4,
-                                                       0,
-                                                       IntPtr.Zero);
+                uint bytesWritten = 0;
 
-                result = HidNativeMethods.WriteFile(h, Data, Device.ReportLength, ref bytesWritten, IntPtr.Zero);
-                HidNativeMethods.CloseHandle(h);
-
-                h = HidNativeMethods.CreateFile("T:\\Scratch\\Output.TeensyNet.writes",
-                                                       0x0004,
-                                                       0,
-                                                       IntPtr.Zero,
-                                                       4,
-                                                       0,
-                                                       IntPtr.Zero);
-
-                HidNativeMethods.WriteFile(h, Encoding.UTF8.GetBytes("X"), 1, ref bytesWritten, IntPtr.Zero);
-                HidNativeMethods.CloseHandle(h);
-            }
-            else
-            {
-                result = HidNativeMethods.WriteFile(Device.Handle,
+                written = HidNativeMethods.WriteFile(Device.Handle,
                                                     Data,
                                                     Device.ReportLength,
                                                     ref bytesWritten,
                                                     IntPtr.Zero) &&
                          bytesWritten == Device.ReportLength;
             }
+
+            return written;
         }
 
-        return result;
+        #if DEBUG
+            var result = true;
+
+            if ( this is HidUploadReport uploadReport &&
+                 uploadReport.TestOutputStream  != null )
+            {
+                try
+                {
+                    uploadReport.TestOutputStream.Write(Data,
+                                                        0,
+                                                        Device.ReportLength);
+                }
+                catch
+                {
+                    result = false;
+                }
+            }
+            else
+            {
+                result = WriteDevice();
+            }
+
+            return result;
+        #else
+            return WriteDevice();
+        #endif
     }
 }
 

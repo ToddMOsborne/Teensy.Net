@@ -76,9 +76,9 @@ public class HexImage
     /// invalid.
     /// </summary>
     public HexImage(Teensy teensy,
-                    string  hexFileName) : this(teensy,
-                                                File.OpenText(hexFileName),
-                                                true)
+                    string hexFileName) : this(teensy,
+                                               File.OpenText(hexFileName),
+                                               true)
     {
     }
 

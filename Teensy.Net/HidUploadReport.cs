@@ -2,6 +2,8 @@
 {
 
 using System;
+using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 /// <summary>
@@ -32,6 +34,14 @@ internal class HidUploadReport : HidReport
     private Teensy Teensy { get; }
 
     /// <summary>
+    /// Used for debugging only. This causes the upload report output normally
+    /// sent to the Teensy to be directed to this file instead.
+    /// </summary>
+    #if DEBUG
+        public FileStream TestOutputStream { get; private set; }
+    #endif
+
+    /// <summary>
     /// Upload an image to the Teensy.
     /// </summary>
     public UploadResults Upload()
@@ -41,9 +51,32 @@ internal class HidUploadReport : HidReport
         // Bail?
         if ( Image.IsValid )
         {
+            #if DEBUG
+                const string filePath =
+                    "T:\\Source\\Teensy.Net\\TestFiles\\blink.hex.TeensyNetOutput";
+
+                // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+                if ( filePath != null )
+                {
+                    TestOutputStream = File.Open(filePath,
+                                                 FileMode.Create,
+                                                 FileAccess.Write,
+                                                 FileShare.None);
+                }
+            #endif
+
             uint imageOffset = 0;
 
             while ( WriteBlock(ref imageOffset, ref result) ) {}
+
+            #if DEBUG
+                if ( TestOutputStream != null )
+                {
+                    TestOutputStream.Close();
+                    TestOutputStream.Dispose();
+                    TestOutputStream = null;
+                }
+            #endif
 
             // One final callback for 100%?
             Teensy.ProvideFeedback((uint)Image.Data.Length,

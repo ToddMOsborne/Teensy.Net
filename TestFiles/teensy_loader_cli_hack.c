@@ -41,7 +41,7 @@
 #include <windows.h>
 #include <setupapi.h>
 #include <hidsdi.h>
-#define InputFileName       "T:\\Source\\Teensy.Net\\TestFiles\\blink_slow_TeensyLC.hex"
+#define InputFileName       "T:\\Source\\Teensy.Net\\TestFiles\\blink.hex"
 #define OutputFileExtension ".Output"
 FILE*   outputFile = NULL;
 

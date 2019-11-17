@@ -174,9 +174,12 @@ public partial class MainForm : Form
     /// </summary>
     private void SetUiState()
     {
-        _rebootButton.Enabled =
-            SelectedTeensy != null &&
-            SelectedTeensy.UsbType != UsbTypes.Disconnected;
+        var selected = SelectedTeensy;
+
+        _fileButton.Enabled = selected != null;
+
+        _rebootButton.Enabled = selected != null &&
+                                selected.UsbType != UsbTypes.Disconnected;
 
         // Make sure that not only is a Teensy selected, but it matches the one
         // used when HexImage was created. If not, the user must reselect it,
@@ -184,9 +187,7 @@ public partial class MainForm : Form
         _uploadButton.Enabled =
             _rebootButton.Enabled &&
             HexImage != null      &&
-            HexImage.Teensy.SerialNumber ==
-                // ReSharper disable once PossibleNullReferenceException
-                SelectedTeensy.SerialNumber;
+            HexImage.Teensy.SerialNumber == selected?.SerialNumber;
     }
 
     /// <summary>
@@ -237,6 +238,11 @@ public partial class MainForm : Form
             // Hook into events we care about.
             teensy.FeedbackProvided       += ProvideFeedback;
             teensy.ConnectionStateChanged += TeensyConnectionStateChanged;
+
+            if ( _teensys.Items.Count == 1 )
+            {
+                _teensys.SelectedIndex = 0;
+            }
 
             SetUiState();
         }
