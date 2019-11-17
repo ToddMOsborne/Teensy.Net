@@ -25,23 +25,25 @@
  * http://www.pjrc.com/teensy/49-teensy.rules
  */
 
-
-// Hack by Todd Osborne to generate TestFiles.
+// Hack by Todd Osborne to generate TestFiles. This contains most of PJRC's
+// code, but also writes programming code to a file.
 #pragma comment(lib, "winmm")
 #pragma comment(lib, "hid")
 #pragma comment(lib, "setupapi")
 #define strcasecmp _stricmp
 #define USE_WIN32
 #define _CRT_SECURE_NO_WARNINGS
-#define InputFileName  "T:\\Source\\Teensy.Net\\TestFiles\\blink_slow_TeensyLC.hex"
-#define OutputFileName "T:\\Source\\Teensy.Net\\TestFiles\\blink_slow_TeensyLC.hex.Output"
-#include <assert.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <string.h>
+#include <windows.h>
+#include <setupapi.h>
+#include <hidsdi.h>
+#define InputFileName       "T:\\Source\\Teensy.Net\\TestFiles\\blink_slow_TeensyLC.hex"
+#define OutputFileExtension ".Output"
+FILE*   outputFile = NULL;
 
 void usage(const char *err)
 {
@@ -99,7 +101,9 @@ const char *filename=NULL;
 
 int main(int argc, char **argv)
 {
-	unsigned char buf[2048];
+	// Hack for output file.
+    char          outputFileName[MAX_PATH];
+    unsigned char buf[2048];
 	int num, addr, r, write_size;
 
 	int first_block=1, waited=0;
@@ -170,7 +174,12 @@ int main(int argc, char **argv)
 		 	filename, num, (double)num / (double)code_size * 100.0);
 	}
 
-	// program the data
+    // Hack for output file.
+    strcpy(outputFileName, InputFileName);
+    strcat(outputFileName, OutputFileExtension);
+    outputFile = fopen(outputFileName, "wb");
+
+    // program the data
 	printf_verbose("Programming");
 	fflush(stdout);
 	for (addr = 0; addr < code_size; addr += block_size) {
@@ -206,6 +215,13 @@ int main(int argc, char **argv)
 		first_block = 0;
 	}
 	printf_verbose("\n");
+
+    // Hack for output file.
+    if ( outputFile )
+    {
+        fclose(outputFile);
+        outputFile = NULL;
+    }
 
 	// reboot to the user's new code
 	if (reboot_after_programming) {
@@ -377,12 +393,6 @@ int soft_reboot(void)
 
 #if defined(USE_WIN32)
 
-// http://msdn.microsoft.com/en-us/library/ms790932.aspx
-#include <windows.h>
-#include <setupapi.h>
-#include <hidsdi.h>
-#include <hidclass.h>
-
 HANDLE open_usb_device(int vid, int pid)
 {
 	GUID guid;
@@ -464,32 +474,16 @@ int write_usb_device(HANDLE h, void *buf, int len, int timeout)
 	}
 
     // Hack to generate TestFile.
+    if ( outputFile )
     {
-        static BOOL firstWrite = TRUE;
-
-        HANDLE h2 = CreateFile(OutputFileName,
-                               FILE_APPEND_DATA,
-                               0,
-                               NULL,
-                               firstWrite ? CREATE_ALWAYS : OPEN_ALWAYS,
-                               FILE_ATTRIBUTE_NORMAL,
-                               NULL);
-
-	    assert(h2 != INVALID_HANDLE_VALUE);
-
-        if ( h2 != INVALID_HANDLE_VALUE )
-        {
-            WriteFile(h2, tmpbuf, len + 1, NULL, NULL);
-            CloseHandle(h2);
-
-            firstWrite = FALSE;
-        }
+        fwrite(tmpbuf, 1, len + 1, outputFile);
     }
 
 	if (!GetOverlappedResult(h, &ov, &n, FALSE)) return 0;
 	if (n <= 0) return 0;
 	return 1;
 }
+
 
 void print_win32_err(void)
 {
