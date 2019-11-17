@@ -16,9 +16,9 @@ internal class HidReport
     /// </summary>
     protected HidReport(HidDevice device)
     {
-        Data =   new byte[device.ReportLength];
+        // We do not include the report ID in the Data array.
+        Data =   new byte[device.ReportLength - 1];
         Device = device;
-        Reset();
     }
 
     /// <summary>
@@ -67,50 +67,49 @@ internal class HidReport
     /// <summary>
     /// The current index where data will be added.
     /// </summary>
-    private uint Index { get; set; } = 1;
-
-    /// <summary>
-    /// Reset so that buffer can be refilled. This zero fills it and sets the
-    /// Data index to 1.
-    /// </summary>
-    protected void Reset()
-    {
-        for ( var i = 0; i < Data.Length; i++ )
-        {
-            Data[i] = 0;
-        }
-
-        Index = 1;
-    }
+    private uint Index { get; set; }
 
     /// <summary>
     /// Set the current Data index to be at the DataOffset of the Teensy.
     /// </summary>
     protected bool SetDataStart(Teensy teensy)
     {
-        var offset = 1 + teensy.DataOffset;
-        var result = offset < Data.Length;
+        var result = teensy.DataOffset < Data.Length;
 
         if ( result )
         {
-            Index = offset;
+            Index = teensy.DataOffset;
         }
 
         return result;
     }
 
     /// <summary>
-    /// Write report data to the device.
+    /// Write report data to the device. Following a successful write, the
+    /// internal Data buffer will be reset to allow more writes.
     /// </summary>
     protected bool Write()
     {
+        var data = new byte[Device.ReportLength];
+        Data.CopyTo(data, 1);
+
         // If this fails, try again after a short delay.
-        var result = WriteInternal();
+        var result = Write(data);
 
         if ( !result )
         {
             Thread.Sleep(100);
-            result = WriteInternal();
+            result = Write(data);
+        }
+
+        if ( result )
+        {
+            for ( var i = 0; i < Data.Length; i++ )
+            {
+                Data[i] = 0;
+            }
+
+            Index = 0;
         }
 
         return result;
@@ -119,9 +118,9 @@ internal class HidReport
     /// <summary>
     /// Write report data to the bootloader.
     /// </summary>
-    private bool WriteInternal()
+    private bool Write(byte[] data)
     {
-        if ( Data.Length != Device.ReportLength )
+        if ( data.Length != Device.ReportLength )
         {
             throw new Exception("Invalid HID report length.");
         }
@@ -135,10 +134,10 @@ internal class HidReport
                 uint bytesWritten = 0;
 
                 written = HidNativeMethods.WriteFile(Device.Handle,
-                                                    Data,
-                                                    Device.ReportLength,
-                                                    ref bytesWritten,
-                                                    IntPtr.Zero) &&
+                                                     data,
+                                                     Device.ReportLength,
+                                                     ref bytesWritten,
+                                                     IntPtr.Zero) &&
                          bytesWritten == Device.ReportLength;
             }
 
@@ -153,7 +152,7 @@ internal class HidReport
             {
                 try
                 {
-                    uploadReport.TestOutputStream.Write(Data,
+                    uploadReport.TestOutputStream.Write(data,
                                                         0,
                                                         Device.ReportLength);
                 }
