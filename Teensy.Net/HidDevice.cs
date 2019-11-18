@@ -200,7 +200,7 @@ internal class HidDevice : IDisposable
     private string Path { get; }
 
     /// <summary>
-    /// The required output report length. This length include the first byte,
+    /// The required output report length. This length includes the first byte,
     /// which is the report ID.
     /// </summary>
     internal ushort ReportLength { get; }

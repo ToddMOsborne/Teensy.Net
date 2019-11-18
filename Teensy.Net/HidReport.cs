@@ -16,27 +16,32 @@ internal class HidReport
     /// </summary>
     protected HidReport(HidDevice device)
     {
-        // We do not include the report ID in the Data array.
-        Data =   new byte[device.ReportLength - 1];
+        if ( device.ReportLength == 0 )
+        {
+            throw new InvalidOperationException(
+                "The HID report length must be known.");
+        }
+
+        // We include the report ID in the Data array.
+        Data =   new byte[device.ReportLength];
         Device = device;
     }
 
     /// <summary>
-    /// Add a byte of data, if able.
+    /// Add a byte of data.
     /// </summary>
-    protected bool AddData(byte b = 0xFF)
+    protected void AddData(byte b = 0xFF)
     {
-        var result = Index < Data.Length;
-
-        if ( result )
+        if ( Index == Data.Length )
         {
-            Data[Index] = b;
-            ++Index;
-
-            IsDirty = true;
+            throw new IndexOutOfRangeException(
+                "Cannot add any more data to HID report.");
         }
 
-        return result;
+        Data[Index] = b;
+        ++Index;
+
+        IsDirty = true;
     }
 
     /// <summary>
@@ -52,24 +57,31 @@ internal class HidReport
     /// <summary>
     /// Fill buffer will bytes.
     /// </summary>
-    protected bool Fill(uint count = 1,
+    protected void Fill(uint count = 1,
                         byte b =     0xFF)
     {
-        var result = true;
-
-        while ( result && count > 0 )
+        while ( count > 0 )
         {
-            result = AddData(b);
+            AddData(b);
             --count;
         }
+    }
 
-        return result;
+    /// <summary>
+    /// Fill from a byte array.
+    /// </summary>
+    protected void Fill(byte[] bytes)
+    {
+        foreach ( var b in bytes )
+        {
+            AddData(b);
+        }
     }
 
     /// <summary>
     /// The current index where data will be added.
     /// </summary>
-    private uint Index { get; set; }
+    private uint Index { get; set; } = 1;
 
     /// <summary>
     /// Determine if there is buffered data that needs to be written.
@@ -79,16 +91,15 @@ internal class HidReport
     /// <summary>
     /// Set the current Data index.
     /// </summary>
-    protected bool SetDataStart(uint index)
+    protected void SetDataStart(uint index)
     {
-        var result = index < Data.Length;
-
-        if ( result )
+        if ( index + 1 >= Data.Length )
         {
-            Index = index;
+            throw new IndexOutOfRangeException(
+                "Data string index is outside of the HID report length.");
         }
 
-        return result;
+        Index = index + 1;
     }
 
     /// <summary>
@@ -103,26 +114,23 @@ internal class HidReport
             return true;
         }
 
-        var data = new byte[Device.ReportLength];
-        Data.CopyTo(data, 1);
-
         // If this fails, try again after a short delay.
-        var result = Write(data);
+        var result = WriteInternal();
 
         if ( !result )
         {
             Thread.Sleep(100);
-            result = Write(data);
+            result = WriteInternal();
         }
 
         if ( result )
         {
-            for ( var i = 0; i < Data.Length; i++ )
+            for ( var i = 1; i < Data.Length; i++ )
             {
                 Data[i] = 0;
             }
 
-            Index =   0;
+            Index =   1;
             IsDirty = false;
         }
 
@@ -132,13 +140,8 @@ internal class HidReport
     /// <summary>
     /// Write report data to the bootloader.
     /// </summary>
-    private bool Write(byte[] data)
+    private bool WriteInternal()
     {
-        if ( data.Length != Device.ReportLength )
-        {
-            throw new Exception("Invalid HID report length.");
-        }
-
         bool WriteDevice()
         {
             var written = Device.Open();
@@ -148,7 +151,7 @@ internal class HidReport
                 uint bytesWritten = 0;
 
                 written = HidNativeMethods.WriteFile(Device.Handle,
-                                                     data,
+                                                     Data,
                                                      Device.ReportLength,
                                                      ref bytesWritten,
                                                      IntPtr.Zero) &&
@@ -171,7 +174,7 @@ internal class HidReport
             {
                 try
                 {
-                    uploadReport.TestOutputStream.Write(data,
+                    uploadReport.TestOutputStream.Write(Data,
                                                         0,
                                                         Device.ReportLength);
                 }

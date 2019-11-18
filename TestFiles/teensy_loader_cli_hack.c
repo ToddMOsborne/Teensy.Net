@@ -42,8 +42,7 @@
 #include <setupapi.h>
 #include <hidsdi.h>
 #define InputFileName       "T:\\Source\\Teensy.Net\\TestFiles\\blink.hex"
-#define OutputFileExtension ".Output"
-FILE*   outputFile = NULL;
+#define OutputFileExtension ".Output2"
 
 void usage(const char *err)
 {
@@ -64,7 +63,7 @@ void usage(const char *err)
 
 // USB Access Functions
 int teensy_open(void);
-int teensy_write(void *buf, int len, double timeout);
+int teensy_write(void *buf, int len, double timeout, FILE* file);
 void teensy_close(void);
 int hard_reboot(void);
 int soft_reboot(void);
@@ -105,6 +104,7 @@ int main(int argc, char **argv)
     char          outputFileName[MAX_PATH];
     unsigned char buf[2048];
 	int num, addr, r, write_size;
+    FILE* outputFile = NULL;
 
 	int first_block=1, waited=0;
 
@@ -177,6 +177,7 @@ int main(int argc, char **argv)
     // Hack for output file.
     strcpy(outputFileName, InputFileName);
     strcat(outputFileName, OutputFileExtension);
+    remove(outputFileName);
     outputFile = fopen(outputFileName, "wb");
 
     // program the data
@@ -210,7 +211,7 @@ int main(int argc, char **argv)
 		} else {
 			die("Unknown code/block size\n");
 		}
-		r = teensy_write(buf, write_size, first_block ? 5.0 : 0.5);
+		r = teensy_write(buf, write_size, first_block ? 5.0 : 0.5, outputFile);
 		if (!r) die("error writing to Teensy\n");
 		first_block = 0;
 	}
@@ -221,7 +222,6 @@ int main(int argc, char **argv)
     {
         fflush(outputFile);
         fclose(outputFile);
-        outputFile = NULL;
     }
 
 	// reboot to the user's new code
@@ -447,7 +447,7 @@ HANDLE open_usb_device(int vid, int pid)
 	return NULL;
 }
 
-int write_usb_device(HANDLE h, void *buf, int len, int timeout)
+int write_usb_device(HANDLE h, void *buf, int len, int timeout, FILE* file)
 {
 	static HANDLE event = NULL;
 	unsigned char tmpbuf[1089];
@@ -464,7 +464,15 @@ int write_usb_device(HANDLE h, void *buf, int len, int timeout)
 	ov.hEvent = event;
 	tmpbuf[0] = 0;
 	memcpy(tmpbuf + 1, buf, len);
-	if (!WriteFile(h, tmpbuf, len + 1, NULL, &ov)) {
+
+    // Hack to generate TestFile.
+    if ( file )
+    {
+        fwrite(tmpbuf, 1, len + 1, file);
+        fflush(file);
+    }
+
+    if (!WriteFile(h, tmpbuf, len + 1, NULL, &ov)) {
 		if (GetLastError() != ERROR_IO_PENDING) return 0;
 		r = WaitForSingleObject(event, timeout);
 		if (r == WAIT_TIMEOUT) {
@@ -473,13 +481,6 @@ int write_usb_device(HANDLE h, void *buf, int len, int timeout)
 		}
 		if (r != WAIT_OBJECT_0) return 0;
 	}
-
-    // Hack to generate TestFile.
-    if ( outputFile )
-    {
-        fwrite(tmpbuf, 1, len + 1, outputFile);
-        fflush(outputFile);
-    }
 
 	if (!GetOverlappedResult(h, &ov, &n, FALSE)) return 0;
 	if (n <= 0) return 0;
@@ -508,7 +509,7 @@ int teensy_open(void)
 	return 0;
 }
 
-int teensy_write(void *buf, int len, double timeout)
+int teensy_write(void *buf, int len, double timeout, FILE* file)
 {
 	int r;
 	uint32_t begin, now, total;
@@ -518,7 +519,8 @@ int teensy_write(void *buf, int len, double timeout)
 	begin = timeGetTime();
 	now = begin;
 	do {
-		r = write_usb_device(win32_teensy_handle, buf, len, total - (now - begin));
+		r = write_usb_device(win32_teensy_handle, buf, len, total - (now - begin), file);
+        file = NULL;
 		if (r > 0) return 1;
 		Sleep(10);
 		now = timeGetTime();
@@ -540,7 +542,7 @@ int hard_reboot(void)
 
 	rebootor = open_usb_device(0x16C0, 0x0477);
 	if (!rebootor) return 0;
-	r = write_usb_device(rebootor, "reboot", 6, 100);
+	r = write_usb_device(rebootor, "reboot", 6, 100, NULL);
 	CloseHandle(rebootor);
 	return r;
 }
@@ -1177,5 +1179,5 @@ void boot(unsigned char *buf, int write_size)
 	buf[0] = 0xFF;
 	buf[1] = 0xFF;
 	buf[2] = 0xFF;
-	teensy_write(buf, write_size, 0.5);
+	teensy_write(buf, write_size, 0.5, NULL);
 }
