@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Todd Osborne (toddosborne@gmail.com)")]
-[assembly: AssemblyCopyright("Copyright © 2019 Todd Osborne")]
+[assembly: AssemblyCopyright("Copyright © 2019 Todd Osborne (http://toddosborne.net)")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
