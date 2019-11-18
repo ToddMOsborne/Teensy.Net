@@ -17,6 +17,11 @@ internal class HidDevice : IDisposable
     /// </summary>
     public HidDevice(string path)
     {
+        if ( string.IsNullOrWhiteSpace(path) )
+        {
+            throw new TeensyException("The HID path must be specified.");
+        }
+
         Path = path;
 
         // Get Vendor and Product IDs.
@@ -27,7 +32,7 @@ internal class HidDevice : IDisposable
             
             if ( HidNativeMethods.HidD_GetAttributes(Handle, ref attributes) )
             {
-                // Only interested in Teeny bootloaders.
+                // Only interested in Teensy bootloaders.
                 if ( attributes.ProductID == Constants.BootloaderId &&
                      attributes.VendorID  == Constants.VendorId )
                 {

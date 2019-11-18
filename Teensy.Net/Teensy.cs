@@ -2,7 +2,6 @@
 {
 
 using System;
-using System.IO;
 using System.IO.Ports;
 using System.Threading;
 
@@ -23,98 +22,27 @@ public class Teensy
         // ReSharper disable once JoinNullCheckWithUsage
         if ( factory == null )
         {
-            throw new InvalidOperationException(
+            throw new TeensyException(
                 $"It is not possible to create a {Constants.TeensyWord} object without an owner TeensyFactory.");
-        }
-
-        if ( teensyType == TeensyTypes.Unknown )
-        {
-            throw new InvalidOperationException(
-                $"It is not possible to create a {Constants.TeensyWord} object without a known type.");
         }
 
         if ( usbType == UsbTypes.Disconnected )
         {
-            throw new InvalidOperationException(
+            throw new TeensyException(
                 $"It is not possible to create a {Constants.TeensyWord} object in a disconnected state.");
         }
 
         if ( serialNumber == 0 )
         {
-            throw new InvalidOperationException(
+            throw new TeensyException(
                 $"It is not possible to create a {Constants.TeensyWord} object without a serial number.");
         }
 
-        Factory =      factory;
-        TeensyType =   teensyType;
-        _portName =    portName;
-        SerialNumber = serialNumber;
-        UsbType =      usbType;
-
-        switch ( teensyType )
-        {
-            case TeensyTypes.Teensy2:
-            {
-                FlashSize =  32256;
-                McuType =    "ATMEGA32U4";
-                break;
-            }
-
-            case TeensyTypes.Teensy2PlusPlus:
-            {
-                FlashSize =  130048;
-                McuType =    "AT90USB1286";
-                break;
-            }
-
-            case TeensyTypes.TeensyLc:
-            {
-                FlashSize = 63488;
-                McuType =   "MK126Z64";
-                break;
-            }
-
-            case TeensyTypes.Teensy30:
-            {
-                FlashSize = 131072;
-                McuType =   "MK20DX128";
-                break;
-            }
-
-            case TeensyTypes.Teensy31:
-            case TeensyTypes.Teensy32:
-            {
-                FlashSize = 262144;
-                McuType =   "MK20DX256";
-                break;
-            }
-
-            case TeensyTypes.Teensy35:
-            {
-                FlashSize = 524288;
-                McuType =   "MK64FX512";
-                break;
-            }
-
-            case TeensyTypes.Teensy36:
-            {
-                FlashSize = 1048576;
-                McuType =   "MK66FX1M0";
-                break;
-            }
-
-            case TeensyTypes.Teensy40:
-            {
-                FlashSize = 2031616;
-                McuType =   "IMXRT1062";
-                break;
-            }
-
-            default:
-            {
-                throw new InvalidOperationException("Unknown Teeny type.");
-            }
-        }
+        TeensyType =    CheckType(teensyType);
+        Factory =       factory;
+        _portName =     portName;
+        SerialNumber =  serialNumber;
+        UsbType =       usbType;
     }
 
     /// <summary>
@@ -161,7 +89,7 @@ public class Teensy
                     }
                 }
             }
-            
+
             ConnectionStateChanged?.Invoke(this);
         }
 
@@ -169,9 +97,45 @@ public class Teensy
     }
 
     /// <summary>
-    /// This event is fired when the UsbType or PortName changes.
+    /// Makes sure type is a support type. As long as type is valid, it will
+    /// be returned. If invalid, this will throw.
+    /// </summary>
+    internal static TeensyTypes CheckType(TeensyTypes type)
+    {
+        switch ( type )
+        {
+            case TeensyTypes.Teensy2:
+            case TeensyTypes.Teensy2PlusPlus:
+            case TeensyTypes.TeensyLc:
+            case TeensyTypes.Teensy30:
+            case TeensyTypes.Teensy31:
+            case TeensyTypes.Teensy32:
+            case TeensyTypes.Teensy35:
+            case TeensyTypes.Teensy36:
+            case TeensyTypes.Teensy40:
+            {
+                return type;
+            }
+
+            default:
+            {
+                throw new TeensyException(
+                    $"Unknown {Constants.TeensyWord} type of {type}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// This event is fired when the UsbType or PortName changes. In other
+    /// words, when a Teensy device goes from Serial to Bootloader, Bootloader
+    /// to Serial, or becomes disconnected.
     /// </summary>
     public event Action<Teensy> ConnectionStateChanged;
+
+    /// <summary>
+    /// Get the size of each data block when uploading to the Teensy device.
+    /// </summary>
+    public uint DataBlockSize => GetDataBlockSize(TeensyType);
 
     /// <summary>
     /// Get the TeensyFactory object that created this Teensy.
@@ -181,24 +145,179 @@ public class Teensy
     /// <summary>
     /// This event is fired whenever work is being done on the Teensy.
     /// The parameters received by the event handler are this object, a string
-    /// that describes what is happening, and during uploads, integers that
+    /// that describes what is happening, and, during uploads, integers that
     /// specify the number of bytes uploaded and the total byte count that will
     /// be uploaded.
     /// </summary>
     public event Action<Teensy, string, uint, uint> FeedbackProvided;
 
     /// <summary>
-    /// Get the flash memory size.
+    /// Get the number of bytes in flash memory a Teensy has.
     /// </summary>
-    public uint FlashSize { get; }
+    public uint FlashSize => GetFlashSize(TeensyType);
+
+    /// <summary>
+    /// Get the size of each data block when uploading to the Teensy device.
+    /// </summary>
+    public static uint GetDataBlockSize(TeensyTypes type)
+    {
+        var result = 1024u;
+
+        switch ( CheckType(type) )
+        {
+            case TeensyTypes.Teensy2:
+            {
+                result = 128;
+                break;
+            }
+
+            case TeensyTypes.Teensy2PlusPlus:
+            {
+                result = 256;
+                break;
+            }
+
+            case TeensyTypes.TeensyLc:
+            {
+                result = 512;
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get the number of bytes of flash memory a Teensy has.
+    /// </summary>
+    public static uint GetFlashSize(TeensyTypes type)
+    {
+        var result = 0u;
+
+        switch ( CheckType(type) )
+        {
+            case TeensyTypes.Teensy2:
+            {
+                result = 32256;
+                break;
+            }
+
+            case TeensyTypes.Teensy2PlusPlus:
+            {
+                result = 130048;
+                break;
+            }
+
+            case TeensyTypes.TeensyLc:
+            {
+                result = 63488;
+                break;
+            }
+
+            case TeensyTypes.Teensy30:
+            {
+                result = 131072;
+                break;
+            }
+
+            case TeensyTypes.Teensy31:
+            case TeensyTypes.Teensy32:
+            {
+                result = 262144;
+                break;
+            }
+
+            case TeensyTypes.Teensy35:
+            {
+                result = 524288;
+                break;
+            }
+
+            case TeensyTypes.Teensy36:
+            {
+                result = 1048576;
+                break;
+            }
+
+            case TeensyTypes.Teensy40:
+            {
+                result = 2031616;
+                break;
+            }
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Get the type of Microcontroller chip on the Teensy device.
     /// </summary>
-    public string McuType { get; }
+    public static string GetMcuType(TeensyTypes type)
+    {
+        string result = null;
+
+        switch ( CheckType(type) )
+        {
+            case TeensyTypes.Teensy2:
+            {
+                result = "ATMEGA32U4";
+                break;
+            }
+
+            case TeensyTypes.Teensy2PlusPlus:
+            {
+                result = "AT90USB1286";
+                break;
+            }
+
+            case TeensyTypes.TeensyLc:
+            {
+                result = "MK126Z64";
+                break;
+            }
+
+            case TeensyTypes.Teensy30:
+            {
+                result = "MK20DX128";
+                break;
+            }
+
+            case TeensyTypes.Teensy31:
+            case TeensyTypes.Teensy32:
+            {
+                result = "MK20DX256";
+                break;
+            }
+
+            case TeensyTypes.Teensy35:
+            {
+                result = "MK64FX512";
+                break;
+            }
+
+            case TeensyTypes.Teensy36:
+            {
+                result = "MK66FX1M0";
+                break;
+            }
+
+            case TeensyTypes.Teensy40:
+            {
+                result = "IMXRT1062";
+                break;
+            }
+        }
+
+        return result;
+    }
 
     /// <summary>
-    /// Return the friendly name of this Teensy, like "Teeny 3.2".
+    /// Get the type of Microcontroller chip on the Teensy device.
+    /// </summary>
+    public string McuType => GetMcuType(TeensyType);
+
+    /// <summary>
+    /// Return the friendly name of this Teensy, like "Teensy 3.2".
     /// </summary>
     public string Name
     {
@@ -261,12 +380,6 @@ public class Teensy
                     result += "4.0";
                     break;
                 }
-
-                default:
-                {
-                    result = "Unknown";
-                    break;
-                }
             }
 
             return result;
@@ -277,18 +390,16 @@ public class Teensy
     /// Get the name of the port used to communicate with the Teensy. This will
     /// be null when UsbType is not UsbTypes.Serial.
     /// </summary>
-    public string PortName =>
-        UsbType == UsbTypes.Serial ? _portName : null;
-
+    public string PortName => UsbType == UsbTypes.Serial ? _portName : null;
     private string _portName;
 
     /// <summary>
     /// Fires the FeedbackProvided event handlers. If status is null, a
     /// string describing the upload will be used instead.
     /// </summary>
-    internal void ProvideFeedback(uint   bytesUploaded,
-                                  uint   uploadSize,
-                                  string status = null)
+    public void ProvideFeedback(uint   bytesUploaded,
+                                uint   uploadSize,
+                                string status = null)
     {
         var eh = FeedbackProvided;
 
@@ -301,58 +412,40 @@ public class Teensy
                          : $"{Constants.TeensyWord} Upload Complete";
             }
 
-            Factory.SafeMethod( () =>
+            Utility.Try( () =>
             {
                 eh(this, status, bytesUploaded, uploadSize);
-
-            }, false);
+            });
         }
     }
 
     /// <summary>
     /// Provide feedback that is just a string.
     /// </summary>
-    internal void ProvideFeedback(string status) =>
+    public void ProvideFeedback(string status) =>
         ProvideFeedback(0, 0, status);
 
     /// <summary>
     /// Reboot the Teensy. This method will start the bootloader as needed.
     /// </summary>
-    public bool Reboot()
+    public void Reboot()
     {
         // Bootloader must be running.
-        var result = StartBootloader();
-
-        if ( result )
+        using ( var device = StartBootloader(true) )
         {
-            Factory.SafeMethod( () =>
-            {
-                using ( var device =
-                    HidDevice.FindDevice(SerialNumber) )
-                {
-                    result = device != null && Reboot(device);
-                }
-            });
+            Reboot(device);
         }
-
-        return result;
     }
 
     /// <summary>
-    /// Used when TeensyBootloaderDevice is already known.
+    /// Used when HidDevice is already known.
     /// </summary>
-    private bool Reboot(HidDevice device)
+    private void Reboot(HidDevice device)
     {
         ProvideFeedback($"{Constants.TeensyWord} Rebooting");
 
-        var result = new HidRebootReport(device).Reboot();
-
-        if ( result )
-        {
-            result = WaitForUsbTypeChange(UsbTypes.Serial);
-        }
-
-        return result;
+        new HidRebootReport(device).Reboot();
+        WaitForUsbTypeChange(UsbTypes.Serial);
     }
 
     /// <summary>
@@ -361,28 +454,52 @@ public class Teensy
     public uint SerialNumber { get; }
 
     /// <summary>
-    /// Start the bootloader, as needed. Returns true if bootloader
-    /// is/was running. A Reboot() is required to get out of bootloader mode.
+    /// Start the bootloader, as needed. A Reboot() is required to get out of
+    /// bootloader mode.
     /// </summary>
-    public bool StartBootloader()
-    {
-        var result = UsbType == UsbTypes.Bootloader;
+    public void StartBootloader() => StartBootloader(false);
 
-        // Bootloader already running, or can't run?
-        if ( !result && UsbType == UsbTypes.Serial && PortName != null )
+    /// <summary>
+    /// Start the bootloader, as needed, and return the HidDevice for it, if
+    /// desired.
+    /// </summary>
+    private HidDevice StartBootloader(bool returnHidDevice)
+    {
+        HidDevice result = null;
+
+        // Already running?
+        if ( UsbType != UsbTypes.Bootloader )
         {
+            // Can't run?
+            if ( PortName == null )
+            {
+                throw new TeensyException(
+                    $"Cannot start {Constants.TeensyWord} bootloader because it is not assigned to a communications port.");
+            }
+            
             ProvideFeedback($"Starting {Constants.TeensyWord} Bootloader");
 
-            Factory.SafeMethod( () =>
+            Utility.Try( () =>
             {
                 using ( var port = new SerialPort(PortName) )
                 {
                     port.Open();
                     port.BaudRate = (int)Constants.MagicBaudRate;
                 }
+            }, $"Cannot start {Constants.TeensyWord} bootloader because the communications port failed to initialize with the required baud rate.");
 
-                result = WaitForUsbTypeChange(UsbTypes.Bootloader);
-            });
+            WaitForUsbTypeChange(UsbTypes.Bootloader);
+        }
+
+        if ( returnHidDevice )
+        {
+            result = HidDevice.FindDevice(SerialNumber);
+
+            if ( result == null )
+            {
+                throw new TeensyException(
+                    $"Failed to find the {Constants.TeensyWord} device.");
+            }
         }
 
         return result;
@@ -395,74 +512,52 @@ public class Teensy
 
     /// <summary>
     /// This timeout is used when starting the bootloader, reboots, etc. The
-    /// default is 5 seconds.
+    /// default, and minimum, is 5 seconds.
     /// </summary>
-    public TimeSpan Timeout { get; set; } = new TimeSpan(0, 0, 5);
-
-    /// <summary>
-    /// Upload the image to the Teensy. A reboot after upload is required to
-    /// bring the Teensy back online, and will be done automatically by this
-    /// method.
-    /// </summary>
-    public UploadResults UploadImage(string hexFileName)
+    public TimeSpan Timeout
     {
-        var result = UploadResults.ErrorInvalidHexImage;
-
-        if ( !string.IsNullOrWhiteSpace(hexFileName) &&
-             File.Exists(hexFileName) )
+        get => _timeout;
+        set 
         {
-            result = UploadImage(new HexImage(this, hexFileName));
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Upload the image to the Teensy. A reboot after upload is required to
-    /// bring the Teensy back online, and will be done automatically by this
-    /// method.
-    /// </summary>
-    public UploadResults UploadImage(HexImage image)
-    {
-        var result = UploadResults.ErrorInvalidHexImage;
-
-        if ( image.IsValid )
-        {
-            result = UploadResults.ErrorBootLoaderNotAvailable;
-            
-            if ( StartBootloader() )
+            if ( value.TotalSeconds < 5f )
             {
-                result = UploadResults.ErrorFindTeensy;
-                
-                Factory.SafeMethod( () =>
-                {
-                    using ( var device =
-                        HidDevice.FindDevice(SerialNumber) )
-                    {
-                        if ( device != null )
-                        {
-                            result = new HidUploadReport(device,
-                                                         this,
-                                                         image).Upload();
-
-                            // Always reboot now.
-                            var rebooted = Reboot(device);
-
-                            if ( result == UploadResults.Success && !rebooted )
-                            {
-                                result = UploadResults.SuccessFailedReboot;
-                            }
-                        }
-                        else
-                        {
-                            result = UploadResults.ErrorFindTeensy;
-                        }
-                    }
-                });
+                throw new TeensyException(
+                    $"The minimum Timeout value for a {Constants.TeensyWord} device is 5 seconds.");
             }
+
+            _timeout = value;
         }
 
-        return result;
+    }
+    private TimeSpan _timeout = new TimeSpan(0, 0, 5);
+
+    /// <summary>
+    /// Upload the image to the Teensy. A reboot after upload is required to
+    /// bring the Teensy back online, and will be done automatically by this
+    /// method.
+    /// </summary>
+    public void UploadImage(string hexFileName) =>
+        UploadImage(new HexImage(TeensyType, hexFileName));
+
+    /// <summary>
+    /// Upload the image to the Teensy. A reboot after upload is required to
+    /// bring the Teensy back online, and will be done automatically by this
+    /// method.
+    /// </summary>
+    public void UploadImage(HexImage image)
+    {
+        if ( image == null )
+        {
+            throw new TeensyException(
+                "The HEX image to upload must be specified.");
+        }
+
+        // Make sure the bootloader is running.
+        using ( var device = StartBootloader(true) )
+        {
+            new HidUploadReport(device, this, image).Upload();
+            Reboot(device);
+        }
     }
 
     /// <summary>
@@ -520,11 +615,11 @@ public class Teensy
     /// <summary>
     /// Wait for a change in the UsbType.
     /// </summary>
-    private bool WaitForUsbTypeChange(UsbTypes desiredType)
+    private void WaitForUsbTypeChange(UsbTypes desiredType)
     {
         if ( desiredType == UsbTypes.Disconnected )
         {
-            throw new Exception("Cannot wait for disconnected state.");
+            throw new TeensyException("Cannot wait for disconnected state.");
         }
 
         var e = desiredType == UsbTypes.Bootloader
@@ -532,7 +627,12 @@ public class Teensy
                 : UsbTypeSerialReady;
 
         e.Reset();
-        return e.WaitOne(Timeout);
+
+        if ( !e.WaitOne(Timeout) )
+        {
+            throw new TeensyException(
+                $"Failed waiting for the {Constants.TeensyWord} device state to change to {desiredType}.");
+        }
     }
 }
 

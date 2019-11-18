@@ -76,40 +76,6 @@ public enum TeensyTypes
 }
 
 /// <summary>
-/// Possible results when uploading a hex image.
-/// </summary>
-public enum UploadResults
-{
-    /// <summary>
-    /// Upload was successful.
-    /// </summary>
-    Success,
-    /// <summary>
-    /// Upload was succesful, but the reboot failed. The Teensy will have to be
-    /// hardware rebooted.
-    /// </summary>
-    SuccessFailedReboot,
-    /// <summary>
-    /// The bootloader was not available and could not be started.
-    /// </summary>
-    ErrorBootLoaderNotAvailable,
-    /// <summary>
-    /// After starting the bootloader, the Teensy could not be found.
-    /// It will be in a bad state, and will have to be powered off and back on
-    /// to correct.
-    /// </summary>
-    ErrorFindTeensy,
-    /// <summary>
-    /// The HEX image to upload is invalid.
-    /// </summary>
-    ErrorInvalidHexImage,
-    /// <summary>
-    /// Failed while uploading the image.
-    /// </summary>
-    ErrorUpload
-}
-
-/// <summary>
 /// Types of USB devices.
 /// </summary>
 public enum UsbTypes

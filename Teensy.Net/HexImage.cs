@@ -11,22 +11,61 @@ using System.IO;
 public class HexImage
 {
     /// <summary>
-    /// Constructor must be initialized with the Teensy and the reader to read
-    /// image data from. Use Factory.LastException to find any errors.
+    /// Get the raw (binary) data associated with this image.
     /// </summary>
-    public HexImage(Teensy     teensy,
-                    TextReader reader,
-                    bool       disposeStream = false)
+    private readonly byte[] _data;
+
+    /// <summary>
+    /// Constructor must be initialized with the Teensy type and the reader to
+    /// read image data from.
+    /// </summary>
+    public HexImage(TeensyTypes type,
+                    TextReader  reader,
+                    bool        disposeStream = false)
     {
-        Teensy = teensy;
+        if ( reader == null )
+        {
+            throw new TeensyException(
+                "The HEX stream to read must be specified.");
+        }
+
+        TeensyType = Teensy.CheckType(type);
+
+        switch ( TeensyType )
+        {
+            case TeensyTypes.Teensy2:
+            {
+                DataBlockSize = 128;
+                break;
+            }
+
+            case TeensyTypes.Teensy2PlusPlus:
+            {
+                DataBlockSize = 256;
+                break;
+            }
+
+            case TeensyTypes.TeensyLc:
+            {
+                DataBlockSize = 512;
+                break;
+            }
+
+            default:
+            {
+                DataBlockSize = 1024;
+                break;
+            }
+        }
 
         // Initialize image.
-        var size = Teensy.FlashSize;
-        Data =     new byte[size];
+        var valid = false;
+        var size =  Teensy.GetFlashSize(TeensyType);
+        _data =     new byte[size];
 
         for ( var i = 0; i < size; i++ )
         {
-            Data[i] = 0xFF;
+            _data[i] = 0xFF;
         }
 
         var lineNumber = (uint)1;
@@ -37,94 +76,130 @@ public class HexImage
         // Segment Base Address.
         var segba = (uint)0;
 
-        // Do not allow parsing to throw exception.
-        Teensy.Factory.SafeMethod( () =>
+        // Do not allow parsing to throw exception. We may need to dispose of
+        // the stream after.
+        var exception = Utility.Try( () =>
         {
             var tempData = new byte[0];
 
             while ( ParseLine(reader.ReadLine(),
                               ref ulba,
                               ref segba,
-                              ref tempData) )
+                              ref tempData,
+                              ref valid) )
             {
                 ++lineNumber;
             }
-
-        }, out var exception);
+        });
 
         if ( disposeStream )
         {
-            Teensy.Factory.SafeMethod( () =>
-            {
-                reader.Close();
-                reader.Dispose();
-
-            }, false);
+            Utility.Try(reader.Dispose);
         }
 
         if ( exception != null )
         {
-            Teensy.Factory.LastException = new HexImageException(
-                $"Invalid hex file image data was found on or near line {lineNumber}: {exception.Message}");
+            Utility.Throw(
+                exception,
+                $"Invalid HEX file image data was found on or near line {lineNumber}.");
         }
+
+        // Determine the total length of data that will be written.
+        var totalLength = 0u;
+
+        Chunk((bytes, imageOffset) =>
+        {
+            totalLength = imageOffset + DataBlockSize;
+        });
+
+        // Reset Data to match actual size.
+        Array.Resize(ref _data, (int)totalLength);
     }
 
     /// <summary>
-    /// Constructor must be initialized with the Teensy and the name of the
-    /// hex file to read. Use Factory.LastException to find any errors.
-    /// However, this will throw a FileNotFoundException if hexFileName is
-    /// invalid.
+    /// Constructor must be initialized with the Teensy type and the name of
+    /// the hex file to read.
     /// </summary>
-    public HexImage(Teensy teensy,
-                    string hexFileName) : this(teensy,
-                                               File.OpenText(hexFileName),
-                                               true)
+    public HexImage(TeensyTypes type,
+                    string      hexFileName) : this(type,
+                                                    CheckFile(hexFileName),
+                                                    true)
     {
+    }
+
+    /// <summary>
+    /// Private helper.
+    /// </summary>
+    private static StreamReader CheckFile(string hexFileName)
+    {
+        StreamReader result = null;
+        
+        if ( string.IsNullOrWhiteSpace(hexFileName) )
+        {
+            throw new TeensyException(
+                "The full path to the HEX file must be specified.");
+        }
+
+        var exists = false;
+
+        Utility.Try( () =>
+        {
+            exists = File.Exists(hexFileName);
+        });
+
+        if ( !exists )
+        {
+            throw new TeensyException(
+                "The specified HEX file does not exist.");
+        }
+
+        Utility.Try( () =>
+        {
+            result = File.OpenText(hexFileName);
+        }, "The specified HEX file could not be opened.");
+
+        return result;
     }
 
     /// <summary>
     /// Call a callback once for each chunk of data in the image. The callback
-    /// will receive the data as well as the offset into the data. Return true
-    /// from the callback to keeping chunking.
+    /// will receive the data as well as the offset into the data.
     /// </summary>
-    public void Chunk(uint                     chunkSize,
-                      Func<byte[], uint, bool> callback)
+    internal void Chunk(Action<byte[], uint> callback)
     {
-        var chunk =       new byte[chunkSize];
-        var imageData =   Data;
-        var imageLength = imageData.Length;
+        var chunk = new byte[DataBlockSize];
 
         for ( var imageOffset = 0u;
-              imageOffset < imageLength;
-              imageOffset += chunkSize )
+              imageOffset < _data.Length;
+              imageOffset += DataBlockSize )
         {
-            var keepGoing = true;
+            var keepGoing = false;
 
             // Clear chunk.
-            for ( var i = 0; i < chunkSize; i++ )
+            for ( var i = 0; i < DataBlockSize; i++ )
             {
                 chunk[i] = 0;
             }
 
             // Is the image empty?
             for ( var i = 0;
-                  i < chunkSize && imageOffset + i < imageLength;
+                  i < DataBlockSize && imageOffset + i < _data.Length;
                   i++ )
             {
-                keepGoing = false;
-
                 // Not empty? Always call for first chunk.
-                if ( imageOffset == 0 || imageData[imageOffset + i] != 0xFF )
+                if ( imageOffset == 0 || _data[imageOffset + i] != 0xFF )
                 {
+                    keepGoing = true;
+
                     // Copy data.
                     for ( var j = 0;
-                          j < chunkSize && imageOffset + j < imageLength;
+                          j < DataBlockSize && imageOffset + j < _data.Length;
                           j++ )
                     {
-                        chunk[j] = imageData[imageOffset + j];
+                        chunk[j] = _data[imageOffset + j];
                     }
 
-                    keepGoing = callback(chunk, imageOffset);
+                    callback(chunk, imageOffset);
                     break;
                 }
             }
@@ -137,14 +212,9 @@ public class HexImage
     }
 
     /// <summary>
-    /// Get the raw (binary) data associated with this image.
+    /// The size of each data block that can be uploaded.
     /// </summary>
-    private byte[] Data { get; }
-
-    /// <summary>
-    /// Determine if the image is valid and has been processed normally.
-    /// </summary>
-    public bool IsValid { get; private set; }
+    private uint DataBlockSize { get; }
 
     /// <summary>
     /// Try to determine if this hex image is really valid for the Teensy. This
@@ -156,78 +226,73 @@ public class HexImage
     /// that determination. You may want to warn your users before attempting
     /// to upload this image.
     /// </summary>
-    public bool IsValidForTeensy
+    public bool IsKnownGood
     {
         get 
         {
-            var result = IsValid;
+            // Assume failure.
+            var result = false;
+            
+            const int start = 0x400;
 
-            if ( result )
+            if ( _data.Length >= start )
             {
-                // Assume failure now.
-                result = false;
-                
-                const int start = 0x400;
+                var resetHandlerAddress = BitConverter.ToUInt32(_data, 4);
 
-                if ( Data.Length >= start )
+                if ( resetHandlerAddress < start )
                 {
-                    var resetHandlerAddress = BitConverter.ToUInt32(Data, 4);
+                    var magic = 0;
 
-                    if ( resetHandlerAddress < start )
+                    switch ( resetHandlerAddress )
                     {
-                        var magic = 0;
-
-                        switch ( resetHandlerAddress )
+                        // Teensy 3.0
+                        case 0xF9:
                         {
-                            // Teensy 3.0
-                            case 0xF9:
-                            {
-                                magic = 0x00043F82;
-                                break;
-                            }
-
-                            // Teensy 3.1/2
-                            case 0x1BD:
-                            {
-                                magic = 0x00043F82;
-                                break;
-                            }
-
-                            // Teensy LC
-                            case 0xC1:
-                            {
-                                magic = 0x00003F82;
-                                break;
-                            }
-
-                            // Teensy 3.5
-                            case 0x199:
-                            {
-                                magic = 0x00043F82;
-                                break;
-                            }
-
-                            // Teensy 3.6
-                            case 0x1D1:
-                            {
-                                magic = 0x00043F82;
-                                break;
-                            }
+                            magic = 0x00043F82;
+                            break;
                         }
 
-                        if ( magic > 0 )
+                        // Teensy 3.1/2
+                        case 0x1BD:
                         {
-                            for ( var offset = resetHandlerAddress;
-                                  offset < start;
-                                  offset++ )
+                            magic = 0x00043F82;
+                            break;
+                        }
+
+                        // Teensy LC
+                        case 0xC1:
+                        {
+                            magic = 0x00003F82;
+                            break;
+                        }
+
+                        // Teensy 3.5
+                        case 0x199:
+                        {
+                            magic = 0x00043F82;
+                            break;
+                        }
+
+                        // Teensy 3.6
+                        case 0x1D1:
+                        {
+                            magic = 0x00043F82;
+                            break;
+                        }
+                    }
+
+                    if ( magic > 0 )
+                    {
+                        for ( var offset = resetHandlerAddress;
+                              offset < start;
+                              offset++ )
+                        {
+                            if ( BitConverter.ToUInt32(
+                                   _data,
+                                   (int)offset) == magic )
                             {
-                                if ( BitConverter.ToUInt32(
-                                       Data,
-                                       (int)offset) == magic )
-                                {
-                                    result = true;
-                                    break;
-                                }
+                                result = true;
+                                break;
                             }
                         }
                     }
@@ -246,15 +311,17 @@ public class HexImage
     private bool ParseLine(string     line,
                            ref uint   ulba,
                            ref uint   segba,
-                           ref byte[] tempData)
+                           ref byte[] tempData,
+                           ref bool   valid)
     {
         // Bail?
         if ( string.IsNullOrEmpty(line) )
         {
             // End of file not found?
-            if ( !IsValid )
+            if ( !valid )
             {
-                throw new Exception("The 'end of file' marker was not found.");
+                throw new Exception(
+                    "It does not contain an 'end of file' marker.");
             }
 
             return false;
@@ -308,20 +375,20 @@ public class HexImage
                 var drlo =   Convert.ToUInt16(line.Substring(3, 4), 16);
                 var offset = ulba + segba + drlo;
 
-                if ( Data.Length < offset + tempData.Length )
+                if ( _data.Length < offset + tempData.Length )
                 {
                     throw new Exception(
-                        $"The hex file data exceeds the flash memory size of this {Constants.TeensyWord}.");
+                        $"The data exceeds the flash memory size of this {Constants.TeensyWord}.");
                 }
 
-                tempData.CopyTo(Data, offset);
+                tempData.CopyTo(_data, offset);
                 break;
             }
 
             // End of file.
             case 1:
             {
-                IsValid = true;
+                valid = true;
                 break;
             }
 
@@ -353,13 +420,18 @@ public class HexImage
             }
         }
 
-        return !IsValid;
+        return !valid;
     }
 
     /// <summary>
-    /// The Teensy this object exists for.
+    /// Get the size of this image. This is the total byte count.
     /// </summary>
-    public Teensy Teensy { get; }
+    public uint Size => (uint)_data.Length;
+
+    /// <summary>
+    /// The TeensyType this object exists for.
+    /// </summary>
+    public TeensyTypes TeensyType { get; }
 }
 
 }

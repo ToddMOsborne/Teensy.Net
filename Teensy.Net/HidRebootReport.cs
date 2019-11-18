@@ -19,7 +19,7 @@ internal class HidRebootReport : HidReport
     /// <summary>
     /// Reboot now.
     /// </summary>
-    public bool Reboot() => Write();
+    public void Reboot() => Write();
 }
 
 }

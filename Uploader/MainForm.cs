@@ -24,15 +24,16 @@ public partial class MainForm : Form
     {
         if ( _openFileDialog.ShowDialog(this) == DialogResult.OK )
         {
-            HexImage = new HexImage(SelectedTeensy,
-                                    _openFileDialog.FileName);
-
-            if ( !HexImage.IsValid )
+            try
             {
-                HexImage = null;
+                HexImage = new HexImage(SelectedTeensy.TeensyType,
+                                        _openFileDialog.FileName);
+                SetUiState();
             }
-
-            SetUiState();
+            catch(Exception exception)
+            {
+                ShowException(exception);
+            }
         }
     }
 
@@ -47,28 +48,6 @@ public partial class MainForm : Form
     private HexImage HexImage {get; set; }
 
     /// <summary>
-    /// Notification of exception. Display to user.
-    /// </summary>
-    private void LastExceptionChanged(TeensyFactory sender)
-    {
-        if ( InvokeRequired )
-        {
-             Invoke(new Action<TeensyFactory>(LastExceptionChanged), sender);
-        }
-        else
-        {
-            MessageBox.Show(this,
-                            Factory.LastException.Message,
-                            Resources.Error,
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
-
-            // Clear now that user has been notified.
-            Factory.LastException = null;
-        }
-    }
-
-    /// <summary>
     /// Override makes sure form is displayed before doing work.
     /// </summary>
     protected override void OnLoad(EventArgs e)
@@ -80,22 +59,14 @@ public partial class MainForm : Form
 
         ShowWaitCursor( () =>
         {
-            // If exceptions occur, we want to be notified.
-            Factory.LastExceptionChanged += LastExceptionChanged;
-
             // Add all existing Teensys to listbox.
-            Factory.EnumTeensys( teensy =>
+            Factory.EnumTeensies( teensy =>
             {
                 TeensyAdded(teensy);
                 return true;
             });
             
-            // Select first Teensy?
-            if ( _teensys.Items.Count > 0 )
-            {
-                _teensys.SelectedIndex = 0;
-            }
-
+            // If a Teensy is selected, place focus on the file open button.
             if ( SelectedTeensy != null )
             {
                 _fileButton.Focus();
@@ -130,14 +101,14 @@ public partial class MainForm : Form
         else
         {
             _status.Text = status;
-            _status.Refresh();
 
             if ( bytesUploaded > 0 )
             {
                 _progress.Maximum = (int)uploadSize;
                 _progress.Value =   (int)bytesUploaded;
-                _progress.Refresh();
             }
+
+            Refresh();
         }
     }
 
@@ -145,29 +116,15 @@ public partial class MainForm : Form
     /// Reboot the Teensy.
     /// </summary>
     private void Reboot(object    sender,
-                        EventArgs e)
-    {
-        ShowWaitCursor( () =>
-        {
-            if ( !SelectedTeensy.Reboot() )
-            {
-                // If not already set, create exception to show message to
-                // user.
-                if ( Factory.LastException == null )
-                {
-                    Factory.LastException =
-                        new Exception(Resources.RebootFailed);
-                }
-            }
-        });
-    }
+                        EventArgs e) => ShowWaitCursor(SelectedTeensy.Reboot);
 
     /// <summary>
     /// Get the selected Teensy, if any.
     /// </summary>
-    private Teensy SelectedTeensy => _teensys.SelectedIndex > -1
-                                     ? (Teensy)_teensys.Items[_teensys.SelectedIndex]
-                                     : null;
+    private Teensy SelectedTeensy =>
+        _teensys.SelectedIndex > -1
+        ? (Teensy)_teensys.Items[_teensys.SelectedIndex]
+        : null;
 
     /// <summary>
     /// Set controls based on current state.
@@ -181,13 +138,13 @@ public partial class MainForm : Form
         _rebootButton.Enabled = selected != null &&
                                 selected.UsbType != UsbTypes.Disconnected;
 
-        // Make sure that not only is a Teensy selected, but it matches the one
-        // used when HexImage was created. If not, the user must reselect it,
-        // even if the same model.
+        // Make sure that not only is a Teensy selected, but it matches the
+        // type used when HexImage was created. If not, the user must reselect
+        // it.
         _uploadButton.Enabled =
             _rebootButton.Enabled &&
             HexImage != null      &&
-            HexImage.Teensy.SerialNumber == selected?.SerialNumber;
+            HexImage.TeensyType == selected?.TeensyType;
     }
 
     /// <summary>
@@ -197,25 +154,41 @@ public partial class MainForm : Form
                             EventArgs e) => SetUiState();
 
     /// <summary>
-    /// Show the wait cursor while a callback operation is run. If interuptable
-    /// is true, a wait cursor with arrow will be shown, allowing an operation
-    /// to be cancelled. This will also create the Factory object, as needed,
-    /// and clear the LastException.
+    /// Show exception to use.
     /// </summary>
-    public void ShowWaitCursor(Action  callback,
-                               bool    interuptable = false)
+    private void ShowException(Exception exception)
+    {
+        MessageBox.Show(this,
+                        exception.Message,
+                        Resources.Error,
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+    }
+
+    /// <summary>
+    /// Show the wait cursor while a callback operation is run. This will also
+    /// create the Factory object, as needed. If the callback results in an
+    /// exception being thrown, it will be shown to the user.
+    /// </summary>
+    public void ShowWaitCursor(Action callback)
     {
         var old = Cursor;
-
-        Cursor =  interuptable ? Cursors.AppStarting : Cursors.WaitCursor;
+        Cursor =  Cursors.WaitCursor;
 
         if ( Factory == null )
         {
             Factory = new TeensyFactory();
         }
 
-        Factory.LastException = null;
-        Factory.SafeMethod(callback);
+        try
+        {
+            callback();
+        }
+        catch(Exception e)
+        {
+            Cursor = old;
+            ShowException(e);
+        }
 
         Cursor = old;
     }
@@ -239,9 +212,9 @@ public partial class MainForm : Form
             teensy.FeedbackProvided       += ProvideFeedback;
             teensy.ConnectionStateChanged += TeensyConnectionStateChanged;
 
-            if ( _teensys.Items.Count == 1 )
+            if ( SelectedTeensy == null )
             {
-                _teensys.SelectedIndex = 0;
+                _teensys.SelectedItem = teensy;
             }
 
             SetUiState();
@@ -263,14 +236,14 @@ public partial class MainForm : Form
         {
             // Refresh the listbox.
             var index =    _teensys.Items.IndexOf(teensy);
-            var selected = _teensys.SelectedIndex;
+            var selected = _teensys.SelectedItem;
 
             _teensys.Items.RemoveAt(index);
             _teensys.Items.Insert(index, teensy);
 
-            if ( selected == index )
+            if ( selected != null )
             {
-                _teensys.SelectedIndex = selected;
+                _teensys.SelectedItem = selected;
             }
 
             SetUiState();
@@ -283,28 +256,25 @@ public partial class MainForm : Form
     private void Upload(object    sender,
                         EventArgs e)
     {
-        ShowWaitCursor( () =>
+        // Try to check that the image is valid for the selected
+        // Teensy type. This is not perfect, so allow the user to choose to
+        // attempt upload anyway if uncertain, but allow them to cancel
+        // it as well.
+        if ( HexImage.IsKnownGood ||
+             MessageBox.Show(
+                this,
+                string.Format(Resources.
+                    CannotValidateTeensyFormat,
+                    SelectedTeensy.Name),
+                Resources.PossibleCorruption,
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) == DialogResult.Yes )
         {
-            // Try to check that the image is valid for the selected
-            // Teensy. This is not perfect, so allow the user to choose to
-            // attempt upload anyway if uncertain, but allow them to cancel
-            // it as well.
-            if ( HexImage.IsValidForTeensy ||
-                 MessageBox.Show(
-                    this,
-                    string.Format(Resources.
-                        CannotValidateTeensyFormat,
-                        SelectedTeensy.Name),
-                    Resources.PossibleCorruption,
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question) == DialogResult.Yes )
+            ShowWaitCursor( () =>
             {
-                MessageBox.Show(
-                    this,
-                    SelectedTeensy.UploadImage(HexImage).ToString(),
-                    Resources.UploadComplete);
-            }
-        });
+                SelectedTeensy.UploadImage(HexImage);
+            });
+        }
     }
 }
 

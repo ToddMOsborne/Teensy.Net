@@ -18,7 +18,7 @@ internal class HidReport
     {
         if ( device.ReportLength == 0 )
         {
-            throw new InvalidOperationException(
+            throw new TeensyException(
                 "The HID report length must be known.");
         }
 
@@ -34,7 +34,7 @@ internal class HidReport
     {
         if ( Index == Data.Length )
         {
-            throw new IndexOutOfRangeException(
+            throw new TeensyException(
                 "Cannot add any more data to HID report.");
         }
 
@@ -95,7 +95,7 @@ internal class HidReport
     {
         if ( index + 1 >= Data.Length )
         {
-            throw new IndexOutOfRangeException(
+            throw new TeensyException(
                 "Data string index is outside of the HID report length.");
         }
 
@@ -106,12 +106,12 @@ internal class HidReport
     /// Write report data to the device. Following a successful write, the
     /// internal Data buffer will be reset to allow more writes.
     /// </summary>
-    protected bool Write()
+    protected void Write()
     {
         // If nothing to write, say everything is fine.
         if ( !IsDirty )
         {
-            return true;
+            return;
         }
 
         // If this fails, try again after a short delay.
@@ -123,18 +123,18 @@ internal class HidReport
             result = WriteInternal();
         }
 
-        if ( result )
+        if ( !result )
         {
-            for ( var i = 1; i < Data.Length; i++ )
-            {
-                Data[i] = 0;
-            }
-
-            Index =   1;
-            IsDirty = false;
+            throw new TeensyException("Failed writing HID record.");
         }
 
-        return result;
+        for ( var i = 1; i < Data.Length; i++ )
+        {
+            Data[i] = 0;
+        }
+
+        Index =   1;
+        IsDirty = false;
     }
 
     /// <summary>

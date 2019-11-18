@@ -12,7 +12,10 @@ using System.Threading;
 /// responsible for generating other objects and provides some utility
 /// methods and events. It listens for the operating system notifications of
 /// when Teensy devices are connected and disconnected, creating new Teensy
-/// objects dynamically, and updating their state.
+/// objects dynamically, and updating their state. The normal usage pattern is
+/// to create one of these objects, hook into the TeensyAdded event to be
+/// notifiied when new Teensy devices are connected to the system, and/or use
+/// the EnumTeensies() method to discover connected Teensy devices.
 /// </summary>
 public class TeensyFactory : IDisposable
 {
@@ -27,11 +30,19 @@ public class TeensyFactory : IDisposable
     /// <summary>
     /// Default constructor. If desired, the frequency of checks for updates
     /// to Teensys connected/disconnected can be specified. The default is to
-    /// check every second.
+    /// check every 3 seconds. One second is the minimum value that can be
+    /// used.
     /// </summary>
     public TeensyFactory(TimeSpan? changeInterval = null)
     {
-        if ( !SafeMethod( () =>
+        if ( changeInterval.HasValue &&
+             changeInterval.Value.TotalSeconds < 1.0F )
+        {
+            throw new TeensyException(
+                $"The minimum interval to look for {Constants.TeensyWord} devices is 1 second.");
+        }
+
+        var exception = Utility.Try( () =>
         {
             var vendor = "'%USB_VID[_]" +
                          Constants.VendorId.ToString("X") + "%'";
@@ -43,7 +54,7 @@ public class TeensyFactory : IDisposable
             {
                 foreach ( var mgmtObject in searcher.Get() )
                 {
-                    SafeMethod( () =>
+                    Utility.Try( () =>
                     {
                         var mcu = CreateTeensy(mgmtObject);
 
@@ -51,8 +62,7 @@ public class TeensyFactory : IDisposable
                         {
                             _teensys.Add(mcu);
                         }
-
-                    }, false);
+                    });
                 }
             }
 
@@ -68,7 +78,7 @@ public class TeensyFactory : IDisposable
                                          : "__InstanceDeletionEvent",
                         Condition =      "TargetInstance ISA 'Win32_PnPEntity'",
                         WithinInterval = changeInterval ??
-                                         new TimeSpan(0, 0, 1)
+                                         new TimeSpan(0, 0, 3)
                     }
                 };
 
@@ -89,9 +99,15 @@ public class TeensyFactory : IDisposable
 
             AddWatcher =    StartWatcher(true);
             RemoveWatcher = StartWatcher(false);
-        }) )
+        });
+
+        if ( exception != null )
         {
             Dispose();
+
+            throw new TeensyException(
+                $"Failed to initialize {Constants.TeensyWord} factory.",
+                exception);
         }
     }
 
@@ -101,7 +117,8 @@ public class TeensyFactory : IDisposable
     private ManagementEventWatcher AddWatcher { get; set; }
 
     /// <summary>
-    /// Create a Teensy from management object.
+    /// Create a Teensy from management object, if the management object
+    /// specifies Teensy information.
     /// </summary>
     private Teensy CreateTeensy(ManagementBaseObject o)
     {
@@ -116,7 +133,7 @@ public class TeensyFactory : IDisposable
         {
             var value = default(T);
 
-            try
+            Utility.Try( () =>
             {
                 var obj = o[fieldName];
 
@@ -124,11 +141,7 @@ public class TeensyFactory : IDisposable
                 {
                     value = test;
                 }
-            }
-            // ReSharper disable once EmptyGeneralCatchClause
-            catch
-            {
-            }
+            });
 
             return value;
         }
@@ -280,24 +293,25 @@ public class TeensyFactory : IDisposable
 
         if ( AddWatcher != null )
         {
-            SafeMethod(AddWatcher.Stop,    false);
-            SafeMethod(AddWatcher.Dispose, false);
+            Utility.Try(AddWatcher.Stop);
+            Utility.Try(AddWatcher.Dispose);
             AddWatcher = null;
         }
 
         if ( RemoveWatcher != null )
         {
-            SafeMethod(RemoveWatcher.Stop,    false);
-            SafeMethod(RemoveWatcher.Dispose, false);
+            Utility.Try(RemoveWatcher.Stop);
+            Utility.Try(RemoveWatcher.Dispose);
             RemoveWatcher = null;
         }
     }
 
     /// <summary>
     /// Enumerate all Teensy devices using a callback method. Return false to
-    /// stop the enumeration.
+    /// stop the enumeration. If the callback throws an exception the
+    /// enumeration will also stop.
     /// </summary>
-    public void EnumTeensys(Func<Teensy, bool> callback)
+    public void EnumTeensies(Func<Teensy, bool> callback)
     {
         List<Teensy> copy;
 
@@ -306,7 +320,7 @@ public class TeensyFactory : IDisposable
             copy = new List<Teensy>(_teensys);
         }
 
-        SafeMethod( () =>
+        Utility.Try( () =>
         {
             foreach ( var mcu in copy )
             {
@@ -329,7 +343,7 @@ public class TeensyFactory : IDisposable
     {
         Teensy result = null;
 
-        EnumTeensys( teensy =>
+        EnumTeensies( teensy =>
         {
             if ( serialNumber == 0 || teensy.SerialNumber == serialNumber )
             {
@@ -344,32 +358,6 @@ public class TeensyFactory : IDisposable
 
         return result;
     }
-
-    /// <summary>
-    /// Get/Set the last exception that was handled internally.
-    /// </summary>
-    public Exception LastException
-    {
-        get => _lastException;
-        set
-        {
-            if ( value != _lastException )
-            {
-                _lastException = value;
-
-                if ( value != null )
-                {
-                    LastExceptionChanged?.Invoke(this);
-                }
-            }
-        }
-    }
-    private Exception _lastException;
-
-    /// <summary>
-    /// This is fired whenever LastException changes to a non-null value.
-    /// </summary>
-    public event Action<TeensyFactory> LastExceptionChanged;
 
     /// <summary>
     /// Notification that a Teensy was added.
@@ -391,46 +379,6 @@ public class TeensyFactory : IDisposable
     private ManagementEventWatcher RemoveWatcher { get; set; }
 
     /// <summary>
-    /// Execute a method. If it throws an exception, store in LastException.
-    /// For no exception, true is returned. If an exception should not be
-    /// saved in LastException, that can be specified.
-    /// </summary>
-    public bool SafeMethod(Action callback,
-                           bool   saveException = true)
-    {
-        var result = SafeMethod(callback, out var exception);
-
-        if ( !result && saveException )
-        {
-            LastException = exception;
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Same as above, but does not store exception in LastException but
-    /// returns it in the out parameter.
-    /// </summary>
-    public bool SafeMethod(Action        callback,
-                           out Exception exception)
-    {
-        exception = null;
-
-        try
-        {
-            callback();
-            return true;
-        }
-        catch(Exception e)
-        {
-            exception = e;
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// This is called when a Teensy has been added to the system.
     /// </summary>
     public event Action<Teensy> TeensyAdded;
@@ -441,46 +389,53 @@ public class TeensyFactory : IDisposable
     private void TeensyChanged(EventArrivedEventArgs e,
                                bool                  added)
     {
-        Teensy teensy = null;
-
-        // We may get this notification for events that are not Teensys at all.
-        // We should ignore those.
-        SafeMethod( () =>
+        Utility.Try( () =>
         {
-            teensy = CreateTeensy((ManagementBaseObject)
+            // We may get this notification for events that are not Teensys
+            // at all. We should ignore those.
+            var teensy = CreateTeensy((ManagementBaseObject)
                 e.NewEvent["TargetInstance"]);
 
-        }, false);
-
-        if ( teensy != null )
-        {
-            void ThreadProc()
+            if ( teensy != null )
             {
-                // Find existing object by serial number to see if we already
-                // know about this object. That means its state has changed.
-                var existing = Find(teensy.SerialNumber);
+                void ThreadProc()
+                {
+                    // Find existing object by serial number to see if we
+                    // already know about this object. That means its state
+                    // has changed.
+                    var existing = Find(teensy.SerialNumber);
 
-                if ( existing != null )
-                {
-                    existing.ChangeState(
-                        added ? teensy.UsbType : UsbTypes.Disconnected,
-                        teensy.PortName);
-                }
-                // Add new Teensy?
-                else if ( added )
-                {
-                    lock(_teensys)
+                    if ( existing != null )
                     {
-                        _teensys.Add(teensy);
-                        TeensyAdded?.Invoke(teensy);
+                        // Do not allow exceptions to be unhandled.
+                        Utility.Try( () =>
+                        {
+                            existing.ChangeState(
+                                added ? teensy.UsbType : UsbTypes.Disconnected,
+                                teensy.PortName);
+                        });
+                    }
+                    // Add new Teensy?
+                    else if ( added )
+                    {
+                        lock(_teensys)
+                        {
+                            _teensys.Add(teensy);
+                        }
+
+                        // Do not allow exceptions to be unhandled.
+                        Utility.Try( () =>
+                        {
+                            TeensyAdded?.Invoke(teensy);
+                        });
                     }
                 }
-            }
 
-            // Do work in background thread. Things with event handlers can
-            // get very wonky if we try to do this work here.
-            new Thread(ThreadProc).Start();
-        }
+                // Do work in background thread. Things with event handlers can
+                // get very wonky if we try to do this work here.
+                new Thread(ThreadProc).Start();
+            }
+        });
     }
 }
 
