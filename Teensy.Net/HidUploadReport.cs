@@ -1,8 +1,11 @@
 ﻿namespace Teensy.Net
 {
 
-using System.IO;
 using System.Threading;
+
+#if DEBUG
+    using System.IO;
+#endif
 
 /// <summary>
 /// This is a HID report used for uploading firmware.
@@ -38,11 +41,11 @@ internal class HidUploadReport : HidReport
     /// </summary>
     private Teensy Teensy { get; }
 
-    /// <summary>
-    /// Used for debugging only. This causes the upload report output normally
-    /// sent to the Teensy to be directed to this file instead.
-    /// </summary>
     #if DEBUG
+        /// <summary>
+        /// Used for debugging only. This causes the upload report output
+        /// normally sent to the Teensy to be directed to this file instead.
+        /// </summary>
         public FileStream TestOutputStream { get; private set; }
     #endif
 
