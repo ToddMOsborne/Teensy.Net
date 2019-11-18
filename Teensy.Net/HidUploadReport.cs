@@ -164,15 +164,17 @@ internal class HidUploadReport : HidReport
 
                 if ( Write() )
                 {
+                    const int sleep = 3 * 1000;
+
                     // The first write erases the chip and needs a
-                    // little longer to complete. Allow it 5 seconds.
+                    // little longer to complete.
                     #if DEBUG
                         if ( TestOutputStream == null )
                         {
-                            Thread.Sleep(5000);
+                            Thread.Sleep(sleep);
                         }
                     #else
-                        Thread.Sleep(5000);
+                        Thread.Sleep(sleep);
                     #endif
 
                     Teensy.ProvideFeedback(imageOffset, totalLength);
