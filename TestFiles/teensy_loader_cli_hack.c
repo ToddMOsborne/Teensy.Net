@@ -44,14 +44,14 @@
 #define OutputFileExtension ".Output"
 
 // Run for Teensy LC.
-#define TLC
+//#define TLC
 // Run for Teensy 3.2.
-//#define T32
+#define T32
 
 #ifdef TLC
     #define InputFileName "T:\\Source\\Teensy.Net\\TestFiles\\blinkLC.hex"
     #define TMCU          "mkl26z64"
-#elif T32
+#elif defined T32
     #define InputFileName "T:\\Source\\Teensy.Net\\TestFiles\\blink32.hex"
     #define TMCU          "mk20dx256"
 #endif

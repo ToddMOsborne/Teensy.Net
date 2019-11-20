@@ -58,7 +58,8 @@ internal class HidUploadReport : HidReport
             // ReSharper disable HeuristicUnreachableCode
             #pragma warning disable 162
             const string filePath = null;
-            //const string filePath = "T:\\Source\\Teensy.Net\\TestFiles\\blink.hex.TeensyNetOutput";
+            //const string filePath = "T:\\Source\\Teensy.Net\\TestFiles\\blinkLC.hex.TeensyNetOutput";
+            //const string filePath = "T:\\Source\\Teensy.Net\\TestFiles\\blink32.hex.TeensyNetOutput";
 
             // ReSharper disable once ConditionIsAlwaysTrueOrFalse
             if ( filePath != null )
