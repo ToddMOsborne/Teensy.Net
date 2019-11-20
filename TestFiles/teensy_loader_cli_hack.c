@@ -41,8 +41,20 @@
 #include <windows.h>
 #include <setupapi.h>
 #include <hidsdi.h>
-#define InputFileName       "T:\\Source\\Teensy.Net\\TestFiles\\blink.hex"
-#define OutputFileExtension ".Output2"
+#define OutputFileExtension ".Output"
+
+// Run for Teensy LC.
+#define TLC
+// Run for Teensy 3.2.
+//#define T32
+
+#ifdef TLC
+    #define InputFileName "T:\\Source\\Teensy.Net\\TestFiles\\blinkLC.hex"
+    #define TMCU          "mkl26z64"
+#elif T32
+    #define InputFileName "T:\\Source\\Teensy.Net\\TestFiles\\blink32.hex"
+    #define TMCU          "mk20dx256"
+#endif
 
 void usage(const char *err)
 {
@@ -1168,7 +1180,7 @@ void parse_options(int argc, char **argv)
 {
     // Hack by Todd Osborne
     filename = InputFileName;
-    read_mcu("mkl26z64");
+    read_mcu(TMCU);
     wait_for_device_to_appear = 1;
 }
 

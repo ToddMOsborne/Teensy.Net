@@ -272,7 +272,7 @@ public class Teensy
 
             case TeensyTypes.TeensyLc:
             {
-                result = "MK126Z64";
+                result = "MKL26Z64VFT4";
                 break;
             }
 
@@ -283,27 +283,32 @@ public class Teensy
             }
 
             case TeensyTypes.Teensy31:
-            case TeensyTypes.Teensy32:
             {
                 result = "MK20DX256";
                 break;
             }
 
+            case TeensyTypes.Teensy32:
+            {
+                result = "MK20DX256VLH7";
+                break;
+            }
+
             case TeensyTypes.Teensy35:
             {
-                result = "MK64FX512";
+                result = "MK64FX512VMD12";
                 break;
             }
 
             case TeensyTypes.Teensy36:
             {
-                result = "MK66FX1M0";
+                result = "MK66FX1M0VMD18";
                 break;
             }
 
             case TeensyTypes.Teensy40:
             {
-                result = "IMXRT1062";
+                result = "iMXRT1062";
                 break;
             }
         }
