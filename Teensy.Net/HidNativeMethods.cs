@@ -1,6 +1,6 @@
 ﻿// ReSharper disable InconsistentNaming
 // ReSharper disable FieldCanBeMadeReadOnly.Local
-namespace Teensy.Net
+namespace TeensyNet
 {
 
 using System;

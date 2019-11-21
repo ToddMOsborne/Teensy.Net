@@ -10,5 +10,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("Provides .NET Support for Working with Teensy Devices")]
 [assembly: AssemblyProduct("Teensy.Net")]
 [assembly: Guid("5c0afec9-d591-4262-979e-434476d5d620")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]

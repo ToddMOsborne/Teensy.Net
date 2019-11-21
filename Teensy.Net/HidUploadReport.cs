@@ -1,4 +1,4 @@
-﻿namespace Teensy.Net
+﻿namespace TeensyNet
 {
 
 using System.Threading;

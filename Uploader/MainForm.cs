@@ -3,7 +3,7 @@
 
 using System;
 using System.Windows.Forms;
-using Teensy.Net;
+using TeensyNet;
 using Properties;
 
 /// <summary>

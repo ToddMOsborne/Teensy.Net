@@ -7,8 +7,8 @@
     <ProjectGuid>{5C0AFEC9-D591-4262-979E-434476D5D620}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Teensy.Net</RootNamespace>
-    <AssemblyName>Teensy.Net</AssemblyName>
+    <RootNamespace>TeensyNet</RootNamespace>
+    <AssemblyName>TeensyNet</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -31,7 +31,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\Teensy.Net.xml</DocumentationFile>
+    <DocumentationFile>bin\Release\TeensyNet.xml</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup>
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>

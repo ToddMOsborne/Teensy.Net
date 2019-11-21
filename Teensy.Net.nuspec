@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
     <id>Teensy.Net</id>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
     <title>Teensy.Net</title>
     <authors>Todd Osborne</authors>
     <owners>ToddOsborne</owners>
@@ -10,14 +10,14 @@
     <license type="expression">MIT</license>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Provides an easy to use and efficient C# and .NET interface for PJRC Teensy devices, including discovery and state management. It has the ability to parse and upload HEX files using the API. The API has just a few classes and is very well documented in code. The sample Uploader application is heavily commented and shows off most of the capabilities of the assembly. There is no other documentation available at this time, though the .NET XML documentation file is included with the NuGet package and works with IntelliSense. The assembly is self-contained and requires no 3rd party code, other than standard .NET components.</description>
-    <releaseNotes>This release provides more complete MCU names for various Teensy devices.</releaseNotes>
+    <releaseNotes>This release changes the namespace from Teensy.Net to TeensyNet. It also changes the assembly name Teensy.Net.dll to TeensyNet.dll.</releaseNotes>
     <copyright>Copyright 2019 Todd Osborne</copyright>
     <language>en-US</language>
     <tags>PJRC Teensy Arduino Microcontroller Upload Firmware HEX USB HID</tags>
     <repository type="git" url="https://github.com/ToddMOsborne/Teensy.Net.git" branch="master" />
   </metadata>
   <files>
-    <file src="Teensy.Net\bin\Release\Teensy.Net.dll" target="lib\Teensy.Net.dll" />
-    <file src="Teensy.Net\bin\Release\Teensy.Net.xml" target="lib\Teensy.Net.xml" />
+    <file src="Teensy.Net\bin\Release\TeensyNet.dll" target="lib\TeensyNet.dll" />
+    <file src="Teensy.Net\bin\Release\TeensyNet.xml" target="lib\TeensyNet.xml" />
   </files>
 </package>
